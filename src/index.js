@@ -46,8 +46,8 @@
 
 /**
  * @typedef {Object} DSSClient
- * @property {(params: DSSParams) => Promise<{name: string, type: 'in'|'out', count: number}[]>} getProperties
- * @property {(params: DSSParams) => Promise<{value: string, count: number}[]>} getClasses
+ * @property {(params: DSSParams, abortSignal?: AbortSignal | null) => Promise<{name: string, type: 'in'|'out', count: number}[]>} getProperties
+ * @property {(params: DSSParams, abortSignal?: AbortSignal | null) => Promise<{value: string, count: number}[]>} getClasses
  */
 
 /**
@@ -120,9 +120,10 @@ class BasicDSSClient {
 
     /**
      * @param {DSSParams} params
+     * @param {AbortSignal | null} abortSignal
      * @returns {Promise<{name: string, type: 'in'|'out', count: number}[]>}
      */
-    async getProperties(params) {
+    async getProperties(params, abortSignal = null) {
         const endpointInfo = await this.endpointInfo;
         if (!(params.main.limit)) {
             params.main.limit = 500;
@@ -146,6 +147,7 @@ class BasicDSSClient {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(params),
+                signal: abortSignal,
             });
             const byte_data = await resp.text();
             const data = JSON.parse(byte_data.toString());
@@ -154,9 +156,9 @@ class BasicDSSClient {
                     console.warn(`Warning: fetched properties for ontology ${ont} not complete (limit ${limit} reached) Ignoring results.`);
                 }
             }
-            ontRequests.push(Promise.resolve(data));
+            ontRequests.push(data);
         }
-        const requestResponses = (await Promise.all(ontRequests)).filter(x => x !== null);
+        const requestResponses = ontRequests.filter(x => x !== null);
         const results = requestResponses.filter(isPropertyResponse);
         return results.flatMap(r => r.data.map(
             (p) => ({ name: p.iri, type: p.mark, count: Number(p.cnt) })
@@ -165,9 +167,10 @@ class BasicDSSClient {
 
     /**
      * @param {DSSParams} params 
+     * @param {AbortSignal | null} abortSignal
      * @returns {Promise<{value: string, count: number}[]>}
      */
-    async getClasses(params) {
+    async getClasses(params, abortSignal = null) {
         const endpointInfo = await this.endpointInfo;
 
         if (!(params.main.limit)) {
@@ -177,33 +180,32 @@ class BasicDSSClient {
 
         const results = [];
         for (const ont of this.ontologies) {
-            results.push((async () => {
-                const endpoint = endpointInfo.find(e => e.db_schema_name === ont);
-                if (!endpoint) {
-                    throw new Error(`Endpoint not found for ontology ${ont}`);
-                }
-                params.main.schemaName = endpoint.display_name;
-                params.main.endpointUrl = endpoint.sparql_url;
+            const endpoint = endpointInfo.find(e => e.db_schema_name === ont);
+            if (!endpoint) {
+                throw new Error(`Endpoint not found for ontology ${ont}`);
+            }
+            params.main.schemaName = endpoint.display_name;
+            params.main.endpointUrl = endpoint.sparql_url;
 
-                const resp = await fetch(`${this.baseUrl}/ontologies/${ont}/getClasses`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(params),
-                });
-                const byte_data = await resp.text();
-                const classes = JSON.parse(byte_data.toString());
-                if (!classes.complete) {
-                    if (this.trace_log) {
-                        console.warn(`Warning: fetched classes for ontology ${ont} not complete (limit ${limit} reached) Ignoring results.`);
-                    }
+            const resp = await fetch(`${this.baseUrl}/ontologies/${ont}/getClasses`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(params),
+                signal: abortSignal,
+            });
+            const byte_data = await resp.text();
+            const classes = JSON.parse(byte_data.toString());
+            if (!classes.complete) {
+                if (this.trace_log) {
+                    console.warn(`Warning: fetched classes for ontology ${ont} not complete (limit ${limit} reached) Ignoring results.`);
                 }
-                return classes;
+            }
+            results.push(classes);
 
-            })());
         }
-        const results_resolved = (await Promise.all(results)).filter(x => x !== null);
+        const results_resolved = results.filter(x => x !== null);
         return results_resolved.flatMap(
             (/** @type {{ data: { iri: string; cnt: number }[]; }} */ r) => r.data.map(c => ({ value: c.iri, count: Number(c.cnt) })));
     }
@@ -334,9 +336,10 @@ class DSSAutocompletionClient {
     /**
      * Fetches suggestions for incoming properties.
      * @param {string} tripletValue
+     * @param {AbortSignal | null} abortSignal
      * @return {Promise<{value: string, count: number}[]>}
      */
-    async suggestIncomingProperties(tripletValue) {
+    async suggestIncomingProperties(tripletValue, abortSignal = null) {
         const known_value_classes = await this.tripletStore.getClassesOfElement(tripletValue);
         const known_value_incoming = await this.tripletStore.getIncomingProperties(tripletValue);
         const known_value_outgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
@@ -363,7 +366,7 @@ class DSSAutocompletionClient {
             const builder = property_builder.clone();
             builder.className = cls;
             const params = builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params);
+            const props = await this.dssClient.getProperties(params, abortSignal);
             if (valid_suggestions === null) {
                 valid_suggestions = props;
             } else {
@@ -373,7 +376,7 @@ class DSSAutocompletionClient {
 
         if (known_classes.length === 0) {
             const params = property_builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params);
+            const props = await this.dssClient.getProperties(params, abortSignal);
             valid_suggestions = props;
         }
 
@@ -391,9 +394,10 @@ class DSSAutocompletionClient {
     /**
      * 
      * @param {string} tripletValue 
+     * @param {AbortSignal | null} abortSignal
      * @return {Promise<{value: string, count: number}[]>}
      */
-    async suggestOutgoingProperties(tripletValue) {
+    async suggestOutgoingProperties(tripletValue, abortSignal = null) {
         const known_value_classes = await this.tripletStore.getClassesOfElement(tripletValue);
         const known_value_incoming = await this.tripletStore.getIncomingProperties(tripletValue);
         const known_value_outgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
@@ -420,7 +424,7 @@ class DSSAutocompletionClient {
             builder.className = cls;
             builder.usePPRels = true;
             const params = builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params);
+            const props = await this.dssClient.getProperties(params, abortSignal);
             if (valid_suggestions === null) {
                 valid_suggestions = props;
             } else {
@@ -430,7 +434,7 @@ class DSSAutocompletionClient {
 
         if (known_classes.length === 0) {
             const params = property_builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params);
+            const props = await this.dssClient.getProperties(params, abortSignal);
             valid_suggestions = props;
         }
 
@@ -446,9 +450,10 @@ class DSSAutocompletionClient {
     /**
      * 
      * @param {string} tripletValue 
+     * @param {AbortSignal | null} abortSignal
      * @returns {Promise<{value: string, count: number}[]>}
      */
-    async suggestClasses(tripletValue) {
+    async suggestClasses(tripletValue, abortSignal = null) {
         const known_value_classes = await this.tripletStore.getClassesOfElement(tripletValue);
         const known_value_incoming = await this.tripletStore.getIncomingProperties(tripletValue);
         const known_value_outgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
@@ -472,7 +477,7 @@ class DSSAutocompletionClient {
             const builder = property_builder.clone();
             builder.className = cls;
             const params = builder.buildDSSParams();
-            const classes = await this.dssClient.getClasses(params);
+            const classes = await this.dssClient.getClasses(params, abortSignal);
             if (valid_suggestions === null) {
                 valid_suggestions = classes;
             } else {
@@ -482,7 +487,7 @@ class DSSAutocompletionClient {
 
         if (known_classes.length === 0) {
             const params = property_builder.buildDSSParams();
-            const classes = await this.dssClient.getClasses(params);
+            const classes = await this.dssClient.getClasses(params, abortSignal);
             valid_suggestions = classes;
         }
 
