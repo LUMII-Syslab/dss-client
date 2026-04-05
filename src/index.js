@@ -122,9 +122,9 @@ function isClassResponse(response) {
 class DSSClient {
 
     /**
-     * @type {string[]}
+     * @type {string | null}
      */
-    ontologies = [];
+    ontology = null;
 
     /**@type {string} */
     baseUrl;
@@ -166,20 +166,18 @@ class DSSClient {
 
         const ontRequests = [];
 
-        if (this.ontologies.length === 0) {
-            console.warn("Warning: No ontologies specified for DSSClient. No requests will be made.");
+        if (this.ontology === null) {
+            throw new Error("No ontology specified for DSSClient");
         }
 
-        for (const ont of this.ontologies) {
-            const endpoint = endpointInfo.find(e => e.db_schema_name === ont);
+        const endpoint = endpointInfo.find(e => e.db_schema_name === this.ontology);
             if (!endpoint) {
-                console.warn(`Warning: Endpoint not found for ontology ${ont}. Skipping.`);
-                continue;
+            throw new Error(`Endpoint not found for ontology ${this.ontology}`);
             }
             params.main.schemaName = endpoint.display_name;
             params.main.endpointUrl = endpoint.sparql_url;
 
-            const resp = await fetch(`${this.baseUrl}/ontologies/${ont}/getProperties`, {
+        const resp = await fetch(`${this.baseUrl}/ontologies/${this.ontology}/getProperties`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -191,20 +189,18 @@ class DSSClient {
             const data = JSON.parse(byte_data.toString());
             if (!data.complete) {
                 if (this.trace_log) {
-                    console.warn(`Warning: fetched properties for ontology ${ont} not complete (limit ${limit} reached) Ignoring results.`);
+                console.warn(`Warning: fetched properties for ontology ${this.ontology} not complete (limit ${limit} reached) Ignoring results.`);
                 }
             }
-            ontRequests.push(data);
+        if (!isPropertyResponse(data)) {
+            throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(data)}`);
         }
-        const requestResponses = ontRequests.filter(x => x !== null);
-        const badResponses = requestResponses.filter(r => !isPropertyResponse(r));
-        if (badResponses.length > 0) {
-            throw new Error(`Received ${badResponses.length} bad responses from DSS endpoint. Bad responses: ${JSON.stringify(badResponses)}`);
-        }
-        const results = requestResponses.filter(isPropertyResponse);
-        return results.flatMap(r => r.data.map(
+
+        ontRequests.push(data);
+
+        return data.data.map(
             (p) => ({ name: p.iri, type: p.mark, count: Number(p.o) })
-        ));
+        );
     }
 
     /**
@@ -223,16 +219,14 @@ class DSSClient {
         }
         const limit = params.main.limit;
 
-        const results = [];
-        for (const ont of this.ontologies) {
-            const endpoint = endpointInfo.find(e => e.db_schema_name === ont);
+        const endpoint = endpointInfo.find(e => e.db_schema_name === this.ontology);
             if (!endpoint) {
-                throw new Error(`Endpoint not found for ontology ${ont}`);
+            throw new Error(`Endpoint not found for ontology ${this.ontology}`);
             }
             params.main.schemaName = endpoint.display_name;
             params.main.endpointUrl = endpoint.sparql_url;
 
-            const resp = await fetch(`${this.baseUrl}/ontologies/${ont}/getClasses`, {
+        const resp = await fetch(`${this.baseUrl}/ontologies/${this.ontology}/getClasses`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -245,19 +239,13 @@ class DSSClient {
             const classes = JSON.parse(byte_data.toString());
             if (!classes.complete) {
                 if (this.trace_log) {
-                    console.warn(`Warning: fetched classes for ontology ${ont} not complete (limit ${limit} reached) Ignoring results.`);
+                console.warn(`Warning: fetched classes for ontology ${this.ontology} not complete (limit ${limit} reached) Ignoring results.`);
                 }
             }
-            results.push(classes);
-
+        if (!isClassResponse(classes)) {
+            throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(classes)}`);
         }
-        const badResponses = results.filter(r => !isClassResponse(r));
-        if (badResponses.length > 0) {
-            throw new Error(`Received ${badResponses.length} bad responses from DSS endpoint. Bad responses: ${JSON.stringify(badResponses)}`);
-        }
-        const results_resolved = results.filter(x => isClassResponse(x));
-        return results_resolved.flatMap(
-            (r) => r.data.map(c => ({ value: c.iri, count: Number(c.cnt) })));
+        return classes.data.map(c => ({ value: c.iri, count: Number(c.cnt) }));
     }
 }
 

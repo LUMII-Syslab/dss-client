@@ -7,7 +7,10 @@ const { count } = require('node:console');
 /** @import { TripletStore, DSSClient } from './index.js'  */
 
 
-
+afterEach(() => {
+    jest.restoreAllMocks();
+    jest.resetAllMocks();
+});
 
 describe('ManualTripletStore', () => {
     describe('With a simple set of triplets', () => {
@@ -118,14 +121,19 @@ describe('DSSClient', () => {
                 }
             ])));
             const client = new DSSClient(baseUrl);
+            client.ontology = ontology;
             await client.endpointInfo;
             fetchSpy.mockClear();
-            client.ontologies = [ontology];
             let queryBuilder = new QueryBuilder();
             queryBuilder.limit = 500;
             queryBuilder.propertyKind = 'All';
             return { client, fetchSpy, expectedUrl, ontology, queryBuilder };
         };
+
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
         it('Calls fetch with correct parameters', async () => {
             const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
             fetchSpy.mockResolvedValueOnce(
@@ -201,26 +209,20 @@ describe('DSSClient', () => {
             const body = JSON.parse(receivedInit.body);
             expect(body.main.limit).toBe(500);
         });
-        it('Warns when there are no ontologies set up', async () => {
+        it('Throws when there are no ontologies set up', async () => {
             const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
-            client.ontologies = [];
-            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
-            await client.getProperties({
+            client.ontology = null;
+            await expect(client.getProperties({
                 main: {
                     limit: 250,
                     propertyKind: 'All',
                 }
-            });
-            expect(consoleWarnSpy).toHaveBeenCalled();
-            consoleWarnSpy.mockRestore();
+            })).rejects.toThrow();
         });
-        it('Warns when ontology does not match an existing one', async () => {
+        it('Throws when ontology does not match an existing one', async () => {
             const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
-            client.ontologies = ['nonexistent_ontology'];
-            const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
-            await client.getProperties(queryBuilder.buildDSSParams());
-            expect(consoleWarnSpy).toHaveBeenCalled();
-            consoleWarnSpy.mockRestore();
+            client.ontology = 'nonexistent_ontology';
+            await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
         });
         describe('Bad responses', () => {
             it('Handles non-JSON response', async () => {
@@ -228,14 +230,14 @@ describe('DSSClient', () => {
                 fetchSpy.mockResolvedValueOnce(
                     new Response("Not a JSON")
                 );
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
             });
             it('Handles a non-object response', async () => {
                 const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
                 fetchSpy.mockResolvedValueOnce(
                     new Response(JSON.stringify("Not an object"))
                 );
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
             });
             it('Handles missing data and complete fields', async () => {
                 const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
@@ -244,12 +246,12 @@ describe('DSSClient', () => {
                         data: [],
                     }))
                 );
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
                 fetchSpy.mockResolvedValueOnce(
                     new Response(JSON.stringify({
                         complete: true,
                     })));
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
             });
             it('Handles data field not being an array', async () => {
                 const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
@@ -258,7 +260,7 @@ describe('DSSClient', () => {
                         data: "Not an array",
                         complete: true,
                     })));
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
             });
             it('Handles items in data array not being objects', async () => {
                 const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
@@ -267,7 +269,7 @@ describe('DSSClient', () => {
                         data: ["Not an object"],
                         complete: true,
                     })));
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
             });
             it('Handles items in data array missing iri or mark', async () => {
                 const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
@@ -276,7 +278,7 @@ describe('DSSClient', () => {
                         data: [{ value: 'prop1', count: 10 }],
                         complete: true,
                     })));
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
             });
             it('Handles items in data array having invalid mark', async () => {
                 const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
@@ -285,7 +287,7 @@ describe('DSSClient', () => {
                         data: [{ value: 'prop1', count: 10, mark: 'invalid' }],
                         complete: true,
                     })));
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
             });
             it('Handles items in data array having invalid count or o fields', async () => {
                 const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
@@ -294,7 +296,7 @@ describe('DSSClient', () => {
                         data: [{ value: 'prop1', count: 'invalid', mark: 'valid' }],
                         complete: true,
                     })));
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
             });
             it('Handles complete field not being a boolean', async () => {
                 const { client, fetchSpy, expectedUrl, ontology, queryBuilder } = await makeClient();
@@ -303,7 +305,7 @@ describe('DSSClient', () => {
                         data: [],
                         complete: 'not a boolean',
                     })));
-                expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
+                await expect(client.getProperties(queryBuilder.buildDSSParams())).rejects.toThrow();
             });
         });
 
@@ -328,7 +330,7 @@ describe('DSSClient', () => {
             const client = new DSSClient(baseUrl);
             await client.endpointInfo;
             fetchSpy.mockClear();
-            client.ontologies = [ontology];
+            client.ontology = ontology;
             let queryBuilder = new QueryBuilder();
             queryBuilder.limit = 500;
             queryBuilder.propertyKind = 'All';
@@ -661,6 +663,7 @@ describe('DSSAutocompletionClient', () => {
                     sparql_url: 'http://example.com/sparql'
                 }
             ]);
+            dss_client.ontology = 'test_endpoint';
             const classesMock = jest.spyOn(dss_client, 'getClasses').mockImplementation(async (params) => {
                 const inProperties = params.element.pList.in.map(p => p.name);
                 if (inProperties.includes('likes')) {
@@ -710,9 +713,9 @@ describe('DSSAutocompletionClient', () => {
                     sparql_url: 'http://example.com/sparql'
                 }
             ]);
+            dss_client.ontology = 'test_endpoint';
             const propertiesMock = jest.spyOn(dss_client, 'getProperties').mockImplementation(async (params) => {
 
-                console.log(params.element.pList);
                 const className = params.element.className;
                 if (className === 'Person') {
                     return [
@@ -722,7 +725,6 @@ describe('DSSAutocompletionClient', () => {
                     ];
                 }
                 if (params.element.pList.out.some(p => p.name === 'likes')) {
-                    console.log("Returning knows because of likes");
                     return [
                         { name: 'knows', type: 'in', count: 10 },
                         { name: 'knows', type: 'in', count: 10 },
@@ -741,7 +743,6 @@ describe('DSSAutocompletionClient', () => {
                 value: 'knows',
                 count: 10,
             });
-            console.log(fetchMock.mock.calls);
             expect(fetchMock.mock.calls.length).toBe(1);
             fetchMock.mockRestore();
             propertiesMock.mockRestore();
