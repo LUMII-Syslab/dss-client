@@ -7,7 +7,8 @@
         "node_modules",
         "**/*.test.js",
         "**/*.test.mjs",
-        "src/jest.config.mjs"
+        "src/jest.config.mjs",
+        "jest/set-environment.js"
     ],
     "compilerOptions": {
         "types": [

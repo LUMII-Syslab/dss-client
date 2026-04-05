@@ -5,9 +5,6 @@
  * @property {Object} main
  * @property {'All'|'ObjectExt' | 'Data'} [main.propertyKind]
  * @property {number} [main.limit]
- * @property {Object} [main.pList]
- * @property {Array<{name: string, type: 'in'}>} [main.pList.in]
- * @property {Array<{name: string, type: 'out'}>} [main.pList.out]
  * @property {boolean} [main.use_pp_rels]
  * @property {string} [main.direct_class_role]
  * @property {string} [main.indirect_class_role]
@@ -40,18 +37,12 @@
  * @property {Object[]} data
  * @property {string} data[].iri
  * @property {'in'|'out'} data[].mark
- * @property {number} data[].cnt
+ * @property {string | number} data[].cnt
+ * @property {string | number} data[].o
  * @property {boolean} complete
  */
 
 /**
- * @typedef {Object} DSSClient
- * @property {(params: DSSParams, abortSignal?: AbortSignal | null) => Promise<{name: string, type: 'in'|'out', count: number}[]>} getProperties
- * @property {(params: DSSParams, abortSignal?: AbortSignal | null) => Promise<{value: string, count: number}[]>} getClasses
- */
-
-/**
- * 
  * @param {unknown} response 
  * @returns {response is PropertyResponse}
  */
@@ -76,6 +67,12 @@ function isPropertyResponse(response) {
         if (data.mark !== 'in' && data.mark !== 'out') {
             return false;
         }
+        if (typeof data.cnt !== 'string' && typeof data.cnt !== 'number') {
+            return false;
+        }
+        if (typeof data.o !== 'string' && typeof data.o !== 'number') {
+            return false;
+        }
     }
     if (typeof response["complete"] !== 'boolean') {
         return false;
@@ -84,9 +81,45 @@ function isPropertyResponse(response) {
 }
 
 /**
- * @implements {DSSClient}
+ * @typedef {Object} ClassResponse
+ * @property {Object[]} data
+ * @property {string} data[].iri
+ * @property {string | number} data[].cnt
+ * @property {boolean} complete
  */
-class BasicDSSClient {
+
+/**
+ * @param {unknown} response
+ * @return {response is ClassResponse}
+ */
+function isClassResponse(response) {
+    if (typeof response !== 'object' || response === null) {
+        return false;
+    }
+    if (!("data" in response) || !("complete" in response)) {
+        return false;
+    }
+    if (!Array.isArray(response.data)) {
+        return false;
+    }
+    for (const data of response.data) {
+        if (typeof data !== 'object' || data === null) {
+            return false;
+        }
+        if (typeof data.iri !== 'string') {
+            return false;
+        }
+        if (typeof data.cnt !== 'string' && typeof data.cnt !== 'number') {
+            return false;
+        }
+    }
+    if (typeof response.complete !== 'boolean') {
+        return false;
+    }
+    return true;
+}
+
+class DSSClient {
 
     /**
      * @type {string[]}
@@ -110,12 +143,7 @@ class BasicDSSClient {
      */
     constructor(baseUrl) {
         this.baseUrl = baseUrl;
-        this.endpointInfo = (async () => {
-            const resp = await fetch(`${baseUrl}/info`);
-            const byte_data = await resp.text();
-            const data = JSON.parse(byte_data.toString());
-            return data;
-        })();
+        this.endpointInfo = getEndpoints(baseUrl);
     }
 
     /**
@@ -125,12 +153,22 @@ class BasicDSSClient {
      */
     async getProperties(params, abortSignal = null) {
         const endpointInfo = await this.endpointInfo;
-        if (!(params.main.limit)) {
+        if (params.main === undefined) {
+            params.main = {};
+        }
+        if (!(params.main?.limit)) {
             params.main.limit = 500;
+        }
+        if (!(params.main?.propertyKind)) {
+            params.main.propertyKind = 'All';
         }
         const limit = params.main.limit;
 
         const ontRequests = [];
+
+        if (this.ontologies.length === 0) {
+            console.warn("Warning: No ontologies specified for DSSClient. No requests will be made.");
+        }
 
         for (const ont of this.ontologies) {
             const endpoint = endpointInfo.find(e => e.db_schema_name === ont);
@@ -159,9 +197,13 @@ class BasicDSSClient {
             ontRequests.push(data);
         }
         const requestResponses = ontRequests.filter(x => x !== null);
+        const badResponses = requestResponses.filter(r => !isPropertyResponse(r));
+        if (badResponses.length > 0) {
+            throw new Error(`Received ${badResponses.length} bad responses from DSS endpoint. Bad responses: ${JSON.stringify(badResponses)}`);
+        }
         const results = requestResponses.filter(isPropertyResponse);
         return results.flatMap(r => r.data.map(
-            (p) => ({ name: p.iri, type: p.mark, count: Number(p.cnt) })
+            (p) => ({ name: p.iri, type: p.mark, count: Number(p.o) })
         ));
     }
 
@@ -173,7 +215,10 @@ class BasicDSSClient {
     async getClasses(params, abortSignal = null) {
         const endpointInfo = await this.endpointInfo;
 
-        if (!(params.main.limit)) {
+        if (!(params.main?.limit)) {
+            if (params.main === undefined) {
+                params.main = {};
+            }
             params.main.limit = 500;
         }
         const limit = params.main.limit;
@@ -196,6 +241,7 @@ class BasicDSSClient {
                 signal: abortSignal,
             });
             const byte_data = await resp.text();
+
             const classes = JSON.parse(byte_data.toString());
             if (!classes.complete) {
                 if (this.trace_log) {
@@ -205,25 +251,17 @@ class BasicDSSClient {
             results.push(classes);
 
         }
-        const results_resolved = results.filter(x => x !== null);
+        const badResponses = results.filter(r => !isClassResponse(r));
+        if (badResponses.length > 0) {
+            throw new Error(`Received ${badResponses.length} bad responses from DSS endpoint. Bad responses: ${JSON.stringify(badResponses)}`);
+        }
+        const results_resolved = results.filter(x => isClassResponse(x));
         return results_resolved.flatMap(
-            (/** @type {{ data: { iri: string; cnt: number }[]; }} */ r) => r.data.map(c => ({ value: c.iri, count: Number(c.cnt) })));
+            (r) => r.data.map(c => ({ value: c.iri, count: Number(c.cnt) })));
     }
 }
 
-/**
- * @typedef {Object} TripletStore
- * @property {(tripletValue: string) => Promise<string[]>} getIncomingProperties
- * @property {(tripletValue: string) => Promise<string[]>} getOutgoingProperties
- * @property {(property: string) => Promise<string[]>} getClassesFromIncomingProperty
- * @property {(property: string) => Promise<string[]>} getClassesFromOutgoingProperty
- * @property {(tripletValue: string) => Promise<string[]>} getClassesOfElement
- */
-
-/**
- * @implements {TripletStore}
- */
-class ManualTripletStore {
+class TripletStore {
 
     /** @type {Array<{subject: string, predicate: string, object: string}>} */
     triplets = [];
@@ -248,31 +286,6 @@ class ManualTripletStore {
             .filter(t => t.subject === tripletValue)
             .map(t => t.predicate)
             .filter(v => v != "" && !v.startsWith("?"));
-    }
-
-    /**
-     * @param {string} property
-     * @return {Promise<string[]>}
-     * */
-    async getClassesFromIncomingProperty(property) {
-        return this.triplets.filter(
-            t => t.predicate === property)
-            .map(t => t.object)
-            .filter(v => !v.startsWith("?"))
-            .filter(v => v != "");
-
-    }
-
-    /**
-     * @param {string} property
-     * @return {Promise<string[]>}
-     * */
-    async getClassesFromOutgoingProperty(property) {
-        return this.triplets
-            .filter(t => t.predicate === property)
-            .map(t => t.subject)
-            .filter(v => !v.startsWith("?"))
-            .filter(v => v != "");
     }
 
     /**
@@ -354,7 +367,7 @@ class DSSAutocompletionClient {
         property_builder.incomingProperties = known_incoming;
         property_builder.outgoingProperties = known_outgoing;
         property_builder.usePPRels = true;
-        property_builder.propertyKind = 'ObjectExt';
+        property_builder.propertyKind = 'All';
         property_builder.limit = this.perRequestLimit;
 
         /**
@@ -411,7 +424,7 @@ class DSSAutocompletionClient {
         property_builder.incomingProperties = known_incoming;
         property_builder.outgoingProperties = known_outgoing;
         property_builder.usePPRels = true;
-        property_builder.propertyKind = 'ObjectExt';
+        property_builder.propertyKind = 'All';
         property_builder.limit = this.perRequestLimit;
 
         /**
@@ -465,7 +478,7 @@ class DSSAutocompletionClient {
         const property_builder = new QueryBuilder();
         property_builder.incomingProperties = known_incoming;
         property_builder.outgoingProperties = known_outgoing;
-        property_builder.propertyKind = 'ObjectExt';
+        property_builder.propertyKind = 'All';
         property_builder.limit = this.perRequestLimit;
 
         /**
@@ -593,9 +606,9 @@ async function getEndpoints(baseUrl, abortSignal = null) {
 }
 
 module.exports = {
-    BasicDSSClient,
+    DSSClient,
     QueryBuilder,
-    ManualTripletStore,
+    TripletStore,
     DSSAutocompletionClient,
     getEndpoints,
     intersectSuggestions
