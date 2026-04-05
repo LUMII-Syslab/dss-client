@@ -17,10 +17,10 @@
         "target": "es2015",
         "module": "nodenext",
         "moduleResolution": "nodenext",
-        "downlevelIteration": true,
         "allowJs": true,
         "declaration": true,
         "outDir": "dist",
+        "rootDir": "src",
         "declarationMap": true,
         "strict": true
     },
