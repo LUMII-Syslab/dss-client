@@ -33,6 +33,77 @@
 // @ts-check
 
 /**
+ * @typedef {Object} NamespaceData
+ * @property {number} id
+ * @property {string} name
+ * @property {string} value
+ * @property {number} priority
+ * @property {boolean} is_local
+ * @property {number} basic_order_level
+ * @property {string | number} cl_count
+ * @property {string | number} prop_count
+ */
+
+/**
+ * @param {unknown} data
+ * @return {data is NamespaceData}
+ */
+function isNamespaceData(data) {
+    if (typeof data !== 'object' || data === null) {
+        return false;
+    }
+    if (
+        !("id" in data) || !("name" in data) ||
+        !("value" in data) || !("priority" in data) ||
+        !("is_local" in data) || !("basic_order_level" in data) ||
+        !("cl_count" in data) || !("prop_count" in data)) {
+        return false;
+    }
+    if (typeof data.id !== 'number') {
+        return false;
+    }
+    if (typeof data.name !== 'string') {
+        return false;
+    }
+    if (typeof data.value !== 'string') {
+        return false;
+    }
+    if (typeof data.priority !== 'number') {
+        return false;
+    }
+    if (typeof data.is_local !== 'boolean') {
+        return false;
+    }
+    if (typeof data.basic_order_level !== 'number') {
+        return false;
+    }
+    if (typeof data.cl_count !== 'string' && typeof data.cl_count !== 'number') {
+        return false;
+    }
+    if (typeof data.prop_count !== 'string' && typeof data.prop_count !== 'number') {
+        return false;
+    }
+    return true;
+}
+
+/**
+ * @param {unknown} response
+ * @returns {response is NamespaceData[]}
+ */
+function isNamespaceDataArray(response) {
+    if (!Array.isArray(response)) {
+        return false;
+    }
+    for (const item of response) {
+        if (!isNamespaceData(item)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+/**
  * @typedef {Object} PropertyResponse
  * @property {Object[]} data
  * @property {string} data[].iri
@@ -171,27 +242,27 @@ class DSSClient {
         }
 
         const endpoint = endpointInfo.find(e => e.db_schema_name === this.ontology);
-            if (!endpoint) {
+        if (!endpoint) {
             throw new Error(`Endpoint not found for ontology ${this.ontology}`);
-            }
-            params.main.schemaName = endpoint.display_name;
-            params.main.endpointUrl = endpoint.sparql_url;
+        }
+        params.main.schemaName = endpoint.display_name;
+        params.main.endpointUrl = endpoint.sparql_url;
 
         const resp = await fetch(`${this.baseUrl}/ontologies/${this.ontology}/getProperties`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(params),
-                signal: abortSignal,
-            });
-            const byte_data = await resp.text();
-            const data = JSON.parse(byte_data.toString());
-            if (!data.complete) {
-                if (this.trace_log) {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(params),
+            signal: abortSignal,
+        });
+        const byte_data = await resp.text();
+        const data = JSON.parse(byte_data.toString());
+        if (!data.complete) {
+            if (this.trace_log) {
                 console.warn(`Warning: fetched properties for ontology ${this.ontology} not complete (limit ${limit} reached) Ignoring results.`);
-                }
             }
+        }
         if (!isPropertyResponse(data)) {
             throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(data)}`);
         }
@@ -220,32 +291,42 @@ class DSSClient {
         const limit = params.main.limit;
 
         const endpoint = endpointInfo.find(e => e.db_schema_name === this.ontology);
-            if (!endpoint) {
+        if (!endpoint) {
             throw new Error(`Endpoint not found for ontology ${this.ontology}`);
-            }
-            params.main.schemaName = endpoint.display_name;
-            params.main.endpointUrl = endpoint.sparql_url;
+        }
+        params.main.schemaName = endpoint.display_name;
+        params.main.endpointUrl = endpoint.sparql_url;
 
         const resp = await fetch(`${this.baseUrl}/ontologies/${this.ontology}/getClasses`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(params),
-                signal: abortSignal,
-            });
-            const byte_data = await resp.text();
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(params),
+            signal: abortSignal,
+        });
+        const byte_data = await resp.text();
 
-            const classes = JSON.parse(byte_data.toString());
-            if (!classes.complete) {
-                if (this.trace_log) {
+        const classes = JSON.parse(byte_data.toString());
+        if (!classes.complete) {
+            if (this.trace_log) {
                 console.warn(`Warning: fetched classes for ontology ${this.ontology} not complete (limit ${limit} reached) Ignoring results.`);
-                }
             }
+        }
         if (!isClassResponse(classes)) {
             throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(classes)}`);
         }
         return classes.data.map(c => ({ value: c.iri, count: Number(c.cnt) }));
+    }
+
+    async getNamespaces() {
+        const response = await fetch(`${this.baseUrl}/ontologies/${this.ontology}/ns`, {
+        });
+        const data = await response.json();
+        if (!isNamespaceDataArray(data)) {
+            throw new Error(`Received bad response from DSS endpoint for namespaces. Response: ${JSON.stringify(data)}`);
+        }
+        return data;
     }
 }
 

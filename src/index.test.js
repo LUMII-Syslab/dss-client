@@ -448,6 +448,64 @@ describe('DSSClient', () => {
         });
     });
 
+    describe('getNamespaces', () => {
+        it('Returns namespaces correctly', async () => {
+            const sampleNamespaces = [
+                {
+                    id: 31,
+                    name: 'bibo',
+                    value: 'http://purl.org/ontology/bibo/',
+                    priority: 0,
+                    is_local: false,
+                    basic_order_level: 0,
+                    cl_count: '0',
+                    prop_count: '0'
+                },
+                {
+                    id: 32,
+                    name: 'umbel',
+                    value: 'http://umbel.org/umbel#',
+                    priority: 0,
+                    is_local: false,
+                    basic_order_level: 0,
+                    cl_count: '0',
+                    prop_count: '0'
+                },
+                {
+                    id: 33,
+                    name: 'umbel-rc',
+                    value: 'http://umbel.org/umbel/rc/',
+                    priority: 0,
+                    is_local: false,
+                    basic_order_level: 0,
+                    cl_count: '0',
+                    prop_count: '0'
+                },
+            ];
+            const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(async (url, init) => {
+                if (url.endsWith('/info')) {
+                    return new Response(JSON.stringify([
+                        {
+                            id: 1,
+                            display_name: 'Test Endpoint',
+                            db_schema_name: 'test_endpoint',
+                            schema_name: 'test_schema',
+                            sparql_url: 'http://example.com/sparql'
+                        }]));
+                } else if (url.endsWith('/ns')) {
+                    return new Response(JSON.stringify(sampleNamespaces));
+                }
+                return new Response("Error", { status: 500 });
+            });
+            const client = new DSSClient("http://example.com/dss");
+            client.ontology = 'test_endpoint';
+            const namespaces = await client.getNamespaces();
+            expect(fetchSpy).toHaveBeenCalledWith("http://example.com/dss/ontologies/test_endpoint/ns", expect.anything());
+            expect(namespaces).toEqual(sampleNamespaces);
+            fetchSpy.mockRestore();
+        });
+    });
+
 });
 
 
