@@ -10,7 +10,8 @@
   "scripts": {
     "test": "jest src --inject-globals false",
     "build": "tsc",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepare": "npm run build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
