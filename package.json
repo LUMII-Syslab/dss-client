@@ -1,0 +1,35 @@
+{
+  "name": "dss-client",
+  "version": "0.4.1",
+  "description": "",
+  "license": "MIT",
+  "author": "",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "test": "jest src --inject-globals false",
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@jest/fake-timers": "^30.2.0",
+    "@jest/types": "^30.2.0",
+    "@types/node": "^18.19.130",
+    "dotenv": "^17.4.0",
+    "eslint": "^10.0.3",
+    "globals": "^17.4.0",
+    "jest": "^30.2.0",
+    "jest-mock": "^30.2.0",
+    "jsdoc": "^4.0.5",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1"
+  },
+  "jest": {
+    "setupFiles": [
+      "<rootDir>/jest/set-environment.js"
+    ],
+    "collectCoverage": true
+  }
+}

@@ -1,0 +1,27 @@
+{
+    // Change this to match your project
+    "include": [
+        "src/**/*"
+    ],
+    "exclude": [
+        "node_modules",
+        "**/*.test.js",
+        "**/*.test.mjs",
+        "src/jest.config.mjs",
+        "jest/set-environment.js"
+    ],
+    "compilerOptions": {
+        "types": [
+            "node"
+        ],
+        "target": "es2015",
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "allowJs": true,
+        "declaration": true,
+        "outDir": "dist",
+        "rootDir": "src",
+        "declarationMap": true,
+        "strict": true
+    },
+}
