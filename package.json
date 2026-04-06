@@ -1,6 +1,6 @@
 {
   "name": "dss-client",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "",
   "license": "MIT",
   "author": "",
@@ -31,5 +31,11 @@
       "<rootDir>/jest/set-environment.js"
     ],
     "collectCoverage": true
-  }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "sample.env"
+  ]
 }
