@@ -193,9 +193,35 @@ function isClassResponse(response) {
 class DSSClient {
 
     /**
-     * @type {string | null}
+     * @type {Promise<string | null>}
      */
-    ontology = null;
+    #ontology = Promise.resolve(null);
+
+    /** @returns {Promise<string | null>} */
+    get ontology() {
+        return this.endpointInfo.then(async endpoints => {
+            const ont = await this.#ontology;
+            if (ont === null) {
+                return null;
+            }
+            const endpoint = endpoints.find(e => e.db_schema_name === ont);
+            if (!endpoint) {
+                throw new Error(`Endpoint not found for ontology ${ont}`);
+            }
+            return endpoint.db_schema_name;
+        });
+    }
+
+    /**
+     * @param {string | null | Promise<string | null>} value
+     */
+    set ontology(value) {
+        if (value instanceof Promise) {
+            this.#ontology = value;
+        } else {
+            this.#ontology = Promise.resolve(value);
+        }
+    }
 
     /**@type {string} */
     baseUrl;
@@ -237,18 +263,19 @@ class DSSClient {
 
         const ontRequests = [];
 
-        if (this.ontology === null) {
+        const ontology = await this.ontology;
+        if (ontology === null) {
             throw new Error("No ontology specified for DSSClient");
         }
 
-        const endpoint = endpointInfo.find(e => e.db_schema_name === this.ontology);
+        const endpoint = endpointInfo.find(e => e.db_schema_name === ontology);
         if (!endpoint) {
-            throw new Error(`Endpoint not found for ontology ${this.ontology}`);
+            throw new Error(`Endpoint not found for ontology ${ontology}`);
         }
         params.main.schemaName = endpoint.display_name;
         params.main.endpointUrl = endpoint.sparql_url;
 
-        const resp = await fetch(`${this.baseUrl}/ontologies/${this.ontology}/getProperties`, {
+        const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getProperties`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -260,7 +287,7 @@ class DSSClient {
         const data = JSON.parse(byte_data.toString());
         if (!data.complete) {
             if (this.trace_log) {
-                console.warn(`Warning: fetched properties for ontology ${this.ontology} not complete (limit ${limit} reached) Ignoring results.`);
+                console.warn(`Warning: fetched properties for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
             }
         }
         if (!isPropertyResponse(data)) {
@@ -290,14 +317,15 @@ class DSSClient {
         }
         const limit = params.main.limit;
 
-        const endpoint = endpointInfo.find(e => e.db_schema_name === this.ontology);
+        const ontology = await this.ontology;
+        const endpoint = endpointInfo.find(e => e.db_schema_name === ontology);
         if (!endpoint) {
-            throw new Error(`Endpoint not found for ontology ${this.ontology}`);
+            throw new Error(`Endpoint not found for ontology ${ontology}`);
         }
         params.main.schemaName = endpoint.display_name;
         params.main.endpointUrl = endpoint.sparql_url;
 
-        const resp = await fetch(`${this.baseUrl}/ontologies/${this.ontology}/getClasses`, {
+        const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getClasses`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -310,7 +338,7 @@ class DSSClient {
         const classes = JSON.parse(byte_data.toString());
         if (!classes.complete) {
             if (this.trace_log) {
-                console.warn(`Warning: fetched classes for ontology ${this.ontology} not complete (limit ${limit} reached) Ignoring results.`);
+                console.warn(`Warning: fetched classes for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
             }
         }
         if (!isClassResponse(classes)) {
@@ -319,14 +347,28 @@ class DSSClient {
         return classes.data.map(c => ({ value: c.iri, count: Number(c.cnt) }));
     }
 
+    /**
+     * Fetches a list of namespaces for the current ontology.
+     * @returns {Promise<NamespaceData[]>}
+     */
     async getNamespaces() {
-        const response = await fetch(`${this.baseUrl}/ontologies/${this.ontology}/ns`, {
+        const ontology = await this.ontology;
+        const response = await fetch(`${this.baseUrl}/ontologies/${ontology}/ns`, {
         });
         const data = await response.json();
         if (!isNamespaceDataArray(data)) {
             throw new Error(`Received bad response from DSS endpoint for namespaces. Response: ${JSON.stringify(data)}`);
         }
         return data;
+    }
+
+    /**
+     * Fetches a list of available ontologies.
+     * @returns {Promise<Array<{name: string, db_schema_name: string}>>}
+     */
+    async getOntologyList() {
+        const endpointInfo = await this.endpointInfo;
+        return endpointInfo.map(e => ({ name: e.display_name, db_schema_name: e.db_schema_name }));
     }
 }
 
