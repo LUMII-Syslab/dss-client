@@ -31,5 +31,11 @@
       "<rootDir>/jest/set-environment.js"
     ],
     "collectCoverage": true
-  }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "sample.env"
+  ]
 }
