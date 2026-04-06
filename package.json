@@ -8,7 +8,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "test": "jest src --inject-globals false",
+    "test": "jest src",
     "build": "tsc",
     "prepublishOnly": "npm run build",
     "prepare": "npm run build"
@@ -26,12 +26,6 @@
     "jsdoc": "^4.0.5",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.56.1"
-  },
-  "jest": {
-    "setupFiles": [
-      "<rootDir>/jest/set-environment.js"
-    ],
-    "collectCoverage": true
   },
   "files": [
     "dist",

@@ -195,6 +195,13 @@ const config = {
 
   // Whether to use watchman for file crawling
   // watchman: true,
-};
 
-export default config;
+  injectGlobals: false,
+
+  setupFiles: ["<rootDir>/jest/set-environment.js"],
+  collectCoverage: true,
+
+};
+console.log("Using Jest config:", config);
+
+module.exports = config;
