@@ -173,16 +173,28 @@ describe('DSSClient', () => {
             fetchSpy.mockResolvedValueOnce(
                 new Response(JSON.stringify({
                     data: [
-                        { iri: 'http://example.com/prop1', mark: 'in', o: 10, cnt: 2000 },
-                        { iri: 'http://example.com/prop2', mark: 'out', o: 5, cnt: 1000 },
+                        {
+                            iri: 'http://example.com/prop1', mark: 'in', o: 10, cnt: 2000,
+                            display_name: 'prop1',
+                            local_name: 'prop1',
+                            prefix: 'ex',
+                            ns_id: -1
+                        },
+                        {
+                            iri: 'http://example.com/prop2', mark: 'out', o: 5, cnt: 1000,
+                            display_name: 'prop2',
+                            local_name: 'prop2',
+                            prefix: 'ex',
+                            ns_id: -1
+                        },
                     ], complete: true
                 }))
             );
             const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { });
             const result = await client.getProperties(dssParams);
             expect(result).toEqual([
-                { name: 'http://example.com/prop1', type: 'in', count: 10 },
-                { name: 'http://example.com/prop2', type: 'out', count: 5 },
+                { name: 'http://example.com/prop1', type: 'in', count: 10, display_name: 'prop1', local_name: 'prop1', prefix: 'ex', ns_id: -1 },
+                { name: 'http://example.com/prop2', type: 'out', count: 5, display_name: 'prop2', local_name: 'prop2', prefix: 'ex', ns_id: -1 },
             ]);
             expect(consoleWarnSpy).not.toHaveBeenCalled();
             consoleWarnSpy.mockRestore();
@@ -194,16 +206,40 @@ describe('DSSClient', () => {
             fetchSpy.mockResolvedValueOnce(
                 new Response(JSON.stringify({
                     data: [
-                        { iri: 'http://example.com/prop1', mark: 'in', o: 10, cnt: 2000 },
-                        { iri: 'http://example.com/prop2', mark: 'out', o: 5, cnt: 1000 },
+                        {
+                            iri: 'http://example.com/prop1', mark: 'in', o: 10, cnt: 2000,
+                            display_name: 'prop1',
+                            local_name: 'prop1',
+                            prefix: 'ex',
+                            ns_id: -1
+                        },
+                        {
+                            iri: 'http://example.com/prop2', mark: 'out', o: 5, cnt: 1000,
+                            display_name: 'prop2',
+                            local_name: 'prop2',
+                            prefix: 'ex',
+                            ns_id: -1
+                        },
                     ], complete: true
                 }))
             );
 
             const result = await client.getProperties(dssParams);
             expect(result).toEqual([
-                { name: 'http://example.com/prop1', type: 'in', count: 10 },
-                { name: 'http://example.com/prop2', type: 'out', count: 5 },
+                {
+                    name: 'http://example.com/prop1', type: 'in', count: 10,
+                    display_name: 'prop1',
+                    local_name: 'prop1',
+                    prefix: 'ex',
+                    ns_id: -1
+                },
+                {
+                    name: 'http://example.com/prop2', type: 'out', count: 5,
+                    display_name: 'prop2',
+                    local_name: 'prop2',
+                    prefix: 'ex',
+                    ns_id: -1
+                },
             ]);
             const receivedInit = fetchSpy.mock.calls[0][1];
             const body = JSON.parse(receivedInit.body);

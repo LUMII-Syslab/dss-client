@@ -110,8 +110,34 @@ function isNamespaceDataArray(response) {
  * @property {'in'|'out'} data[].mark
  * @property {string | number} data[].cnt
  * @property {string | number} data[].o
+ * @property {string} data[].display_name
+ * @property {string} data[].local_name
+ * @property {string} data[].prefix
+ * @property {number} data[].ns_id
  * @property {boolean} complete
  */
+
+/**
+ * @typedef {{name: string, type: 'in'|'out', count: number, display_name: string, local_name: string, prefix: string, ns_id: number}} DSSPropertyData
+ */
+
+/**
+ * @typedef {Object} PropertyData
+ * @property {string} value
+ * @property {number} count
+ * @property {string} display_name
+ * @property {string} local_name
+ * @property {string} prefix
+ * @property {number} ns_id
+ * 
+ */
+
+/**
+ * @typedef {Object} ClassData
+ * @property {string} value
+ * @property {number} count
+ */
+
 
 /**
  * @param {unknown} response 
@@ -142,6 +168,18 @@ function isPropertyResponse(response) {
             return false;
         }
         if (typeof data.o !== 'string' && typeof data.o !== 'number') {
+            return false;
+        }
+        if (typeof data.display_name !== 'string') {
+            return false;
+        }
+        if (typeof data.prefix !== 'string') {
+            return false;
+        }
+        if (typeof data.ns_id !== 'number') {
+            return false;
+        }
+        if (typeof data.local_name !== 'string') {
             return false;
         }
     }
@@ -246,7 +284,7 @@ class DSSClient {
     /**
      * @param {DSSParams} params
      * @param {AbortSignal | null} abortSignal
-     * @returns {Promise<{name: string, type: 'in'|'out', count: number}[]>}
+     * @returns {Promise<DSSPropertyData[]>}
      */
     async getProperties(params, abortSignal = null) {
         const endpointInfo = await this.endpointInfo;
@@ -297,14 +335,14 @@ class DSSClient {
         ontRequests.push(data);
 
         return data.data.map(
-            (p) => ({ name: p.iri, type: p.mark, count: Number(p.o) })
+            (p) => ({ name: p.iri, type: p.mark, count: Number(p.o), display_name: p.display_name, local_name: p.local_name, prefix: p.prefix, ns_id: p.ns_id })
         );
     }
 
     /**
      * @param {DSSParams} params 
      * @param {AbortSignal | null} abortSignal
-     * @returns {Promise<{value: string, count: number}[]>}
+     * @returns {Promise<ClassData[]>}
      */
     async getClasses(params, abortSignal = null) {
         const endpointInfo = await this.endpointInfo;
@@ -461,7 +499,7 @@ class DSSAutocompletionClient {
      * Fetches suggestions for incoming properties.
      * @param {string} tripletValue
      * @param {AbortSignal | null} abortSignal
-     * @return {Promise<{value: string, count: number}[]>}
+     * @return {Promise<PropertyData[]>}
      */
     async suggestIncomingProperties(tripletValue, abortSignal = null) {
         const known_value_classes = await this.tripletStore.getClassesOfElement(tripletValue);
@@ -482,7 +520,7 @@ class DSSAutocompletionClient {
         property_builder.limit = this.perRequestLimit;
 
         /**
-         * @type {Array<{name: string, type: "in" | "out", count: number}> | null}
+         * @type {Array<DSSPropertyData> | null}
          */
         let valid_suggestions = null;
 
@@ -510,7 +548,7 @@ class DSSAutocompletionClient {
 
         const incoming_properties = [...(new Array(...valid_suggestions))]
             .filter(p => p.type === "in")
-            .map(p => ({ value: p.name, count: p.count }));
+            .map(p => ({ value: p.name, count: p.count, display_name: p.display_name, local_name: p.local_name, prefix: p.prefix, ns_id: p.ns_id }));
 
         return incoming_properties;
     }
@@ -519,7 +557,7 @@ class DSSAutocompletionClient {
      * 
      * @param {string} tripletValue 
      * @param {AbortSignal | null} abortSignal
-     * @return {Promise<{value: string, count: number}[]>}
+     * @return {Promise<PropertyData[]>}
      */
     async suggestOutgoingProperties(tripletValue, abortSignal = null) {
         const known_value_classes = await this.tripletStore.getClassesOfElement(tripletValue);
@@ -539,7 +577,7 @@ class DSSAutocompletionClient {
         property_builder.limit = this.perRequestLimit;
 
         /**
-         * @type {Array<{name: string, type: "in" | "out", count: number}> | null}
+         * @type {Array<DSSPropertyData> | null}
          */
         let valid_suggestions = null;
 
@@ -566,7 +604,7 @@ class DSSAutocompletionClient {
             valid_suggestions = [];
         }
 
-        const outgoing_properties = [...valid_suggestions].filter(p => p.type === "out").map(p => ({ value: p.name, count: p.count }));
+        const outgoing_properties = [...valid_suggestions].filter(p => p.type === "out").map(p => ({ value: p.name, count: p.count, display_name: p.display_name, local_name: p.local_name, prefix: p.prefix, ns_id: p.ns_id }));
 
         return outgoing_properties;
     }
@@ -575,7 +613,7 @@ class DSSAutocompletionClient {
      * 
      * @param {string} tripletValue 
      * @param {AbortSignal | null} abortSignal
-     * @returns {Promise<{value: string, count: number}[]>}
+     * @returns {Promise<ClassData[]>}
      */
     async suggestClasses(tripletValue, abortSignal = null) {
         const known_value_classes = await this.tripletStore.getClassesOfElement(tripletValue);
@@ -593,7 +631,7 @@ class DSSAutocompletionClient {
         property_builder.limit = this.perRequestLimit;
 
         /**
-         * @type {Array<{value: string, count: number}> | null}
+         * @type {Array<ClassData> | null}
          */
         let valid_suggestions = null;
 
