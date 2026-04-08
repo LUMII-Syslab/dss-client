@@ -118,17 +118,24 @@ function isNamespaceDataArray(response) {
  */
 
 /**
- * @typedef {{name: string, type: 'in'|'out', count: number, display_name: string, local_name: string, prefix: string, ns_id: number}} DSSPropertyData
+ * @typedef {Object} DSSPropertyData
+ * @property {string} name
+ * @property {'in'|'out'} type
+ * @property {number} count
+ * @property {string} displayName
+ * @property {string} localName
+ * @property {string} prefix
+ * @property {number} nsId
  */
 
 /**
  * @typedef {Object} PropertyData
  * @property {string} value
  * @property {number} count
- * @property {string} display_name
- * @property {string} local_name
+ * @property {string} displayName
+ * @property {string} localName
  * @property {string} prefix
- * @property {number} ns_id
+ * @property {number} nsId
  * 
  */
 
@@ -265,7 +272,7 @@ class DSSClient {
     baseUrl;
 
     /**@type {boolean} */
-    trace_log = false;
+    traceLog = false;
 
     /** 
      * @type {Promise<{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]>}
@@ -316,15 +323,16 @@ class DSSClient {
         const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getProperties`, {
             method: 'POST',
             headers: {
+                // eslint-disable-next-line @typescript-eslint/naming-convention
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(params),
             signal: abortSignal,
         });
-        const byte_data = await resp.text();
-        const data = JSON.parse(byte_data.toString());
+        const byteData = await resp.text();
+        const data = JSON.parse(byteData.toString());
         if (!data.complete) {
-            if (this.trace_log) {
+            if (this.traceLog) {
                 console.warn(`Warning: fetched properties for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
             }
         }
@@ -335,7 +343,7 @@ class DSSClient {
         ontRequests.push(data);
 
         return data.data.map(
-            (p) => ({ name: p.iri, type: p.mark, count: Number(p.o), display_name: p.display_name, local_name: p.local_name, prefix: p.prefix, ns_id: p.ns_id })
+            (p) => ({ name: p.iri, type: p.mark, count: Number(p.o), displayName: p.display_name, localName: p.local_name, prefix: p.prefix, nsId: p.ns_id })
         );
     }
 
@@ -366,16 +374,17 @@ class DSSClient {
         const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getClasses`, {
             method: 'POST',
             headers: {
+                // eslint-disable-next-line @typescript-eslint/naming-convention
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify(params),
             signal: abortSignal,
         });
-        const byte_data = await resp.text();
+        const byteData = await resp.text();
 
-        const classes = JSON.parse(byte_data.toString());
+        const classes = JSON.parse(byteData.toString());
         if (!classes.complete) {
-            if (this.trace_log) {
+            if (this.traceLog) {
                 console.warn(`Warning: fetched classes for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
             }
         }
@@ -402,11 +411,11 @@ class DSSClient {
 
     /**
      * Fetches a list of available ontologies.
-     * @returns {Promise<Array<{name: string, db_schema_name: string}>>}
+     * @returns {Promise<Array<{name: string, dbSchemaName: string}>>}
      */
     async getOntologyList() {
         const endpointInfo = await this.endpointInfo;
-        return endpointInfo.map(e => ({ name: e.display_name, db_schema_name: e.db_schema_name }));
+        return endpointInfo.map(e => ({ name: e.display_name, dbSchemaName: e.db_schema_name }));
     }
 }
 
@@ -442,9 +451,9 @@ class TripletStore {
      * @return {Promise<string[]>}
      * */
     async getClassesOfElement(tripletValue) {
-        const valid_classifiers = new Set(["rdf:type", "a", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"]);
+        const validClassifiers = new Set(["rdf:type", "a", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"]);
         return this.triplets
-            .filter(t => valid_classifiers.has(t.predicate) && t.subject === tripletValue)
+            .filter(t => validClassifiers.has(t.predicate) && t.subject === tripletValue)
             .map(t => t.object)
             .filter(v => !v.startsWith("?"))
             .filter(v => v != "");
@@ -464,11 +473,11 @@ function intersectSuggestions(setA, setB, comparator = (a, b) => a === b) {
     const a = new Array(...setA.values());
     const b = new Array(...setB.values());
     const out = [];
-    for (const a_el of a) {
-        const b_el = b.find(be => comparator(a_el, be));
-        if (b_el) {
-            a_el.count = Math.min(a_el.count, b_el.count);
-            out.push(a_el);
+    for (const aElement of a) {
+        const bElement = b.find(be => comparator(aElement, be));
+        if (bElement) {
+            aElement.count = Math.min(aElement.count, bElement.count);
+            out.push(aElement);
         }
     }
     return [...out];
@@ -502,55 +511,55 @@ class DSSAutocompletionClient {
      * @return {Promise<PropertyData[]>}
      */
     async suggestIncomingProperties(tripletValue, abortSignal = null) {
-        const known_value_classes = await this.tripletStore.getClassesOfElement(tripletValue);
-        const known_value_incoming = await this.tripletStore.getIncomingProperties(tripletValue);
-        const known_value_outgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
+        const knownValueClasses = await this.tripletStore.getClassesOfElement(tripletValue);
+        const knownValueIncoming = await this.tripletStore.getIncomingProperties(tripletValue);
+        const knownValueOutgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
 
         // strip variables from known items
-        const known_classes = known_value_classes.filter(c => !c.startsWith("?"));
-        const known_incoming = known_value_incoming.filter(p => !p.startsWith("?"));
-        const known_outgoing = known_value_outgoing.filter(p => !p.startsWith("?"));
+        const knownClasses = knownValueClasses.filter(c => !c.startsWith("?"));
+        const knownIncoming = knownValueIncoming.filter(p => !p.startsWith("?"));
+        const knownOutgoing = knownValueOutgoing.filter(p => !p.startsWith("?"));
 
 
-        const property_builder = new QueryBuilder();
-        property_builder.incomingProperties = known_incoming;
-        property_builder.outgoingProperties = known_outgoing;
-        property_builder.usePPRels = true;
-        property_builder.propertyKind = 'All';
-        property_builder.limit = this.perRequestLimit;
+        const propertyBuilder = new QueryBuilder();
+        propertyBuilder.incomingProperties = knownIncoming;
+        propertyBuilder.outgoingProperties = knownOutgoing;
+        propertyBuilder.usePPRels = true;
+        propertyBuilder.propertyKind = 'All';
+        propertyBuilder.limit = this.perRequestLimit;
 
         /**
          * @type {Array<DSSPropertyData> | null}
          */
-        let valid_suggestions = null;
+        let validSuggestions = null;
 
-        for (const cls of known_classes) {
-            const builder = property_builder.clone();
+        for (const cls of knownClasses) {
+            const builder = propertyBuilder.clone();
             builder.className = cls;
             const params = builder.buildDSSParams();
             const props = await this.dssClient.getProperties(params, abortSignal);
-            if (valid_suggestions === null) {
-                valid_suggestions = props;
+            if (validSuggestions === null) {
+                validSuggestions = props;
             } else {
-                valid_suggestions = intersectSuggestions(valid_suggestions, props, (a, b) => a.name === b.name && a.type === b.type);
+                validSuggestions = intersectSuggestions(validSuggestions, props, (a, b) => a.name === b.name && a.type === b.type);
             }
         }
 
-        if (known_classes.length === 0) {
-            const params = property_builder.buildDSSParams();
+        if (knownClasses.length === 0) {
+            const params = propertyBuilder.buildDSSParams();
             const props = await this.dssClient.getProperties(params, abortSignal);
-            valid_suggestions = props;
+            validSuggestions = props;
         }
 
-        if (valid_suggestions === null) {
-            valid_suggestions = [];
+        if (validSuggestions === null) {
+            validSuggestions = [];
         }
 
-        const incoming_properties = [...(new Array(...valid_suggestions))]
+        const incomingProperties = [...(new Array(...validSuggestions))]
             .filter(p => p.type === "in")
-            .map(p => ({ value: p.name, count: p.count, display_name: p.display_name, local_name: p.local_name, prefix: p.prefix, ns_id: p.ns_id }));
+            .map(p => ({ value: p.name, count: p.count, displayName: p.displayName, localName: p.localName, prefix: p.prefix, nsId: p.nsId }));
 
-        return incoming_properties;
+        return incomingProperties;
     }
 
     /**
@@ -560,53 +569,53 @@ class DSSAutocompletionClient {
      * @return {Promise<PropertyData[]>}
      */
     async suggestOutgoingProperties(tripletValue, abortSignal = null) {
-        const known_value_classes = await this.tripletStore.getClassesOfElement(tripletValue);
-        const known_value_incoming = await this.tripletStore.getIncomingProperties(tripletValue);
-        const known_value_outgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
+        const knownValueClasses = await this.tripletStore.getClassesOfElement(tripletValue);
+        const knownValueIncoming = await this.tripletStore.getIncomingProperties(tripletValue);
+        const knownValueOutgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
 
         // strip variables from known items
-        const known_classes = known_value_classes.filter(c => !c.startsWith("?"));
-        const known_incoming = known_value_incoming.filter(p => !p.startsWith("?"));
-        const known_outgoing = known_value_outgoing.filter(p => !p.startsWith("?"));
+        const knownClasses = knownValueClasses.filter(c => !c.startsWith("?"));
+        const knownIncoming = knownValueIncoming.filter(p => !p.startsWith("?"));
+        const knownOutgoing = knownValueOutgoing.filter(p => !p.startsWith("?"));
 
-        const property_builder = new QueryBuilder();
-        property_builder.incomingProperties = known_incoming;
-        property_builder.outgoingProperties = known_outgoing;
-        property_builder.usePPRels = true;
-        property_builder.propertyKind = 'All';
-        property_builder.limit = this.perRequestLimit;
+        const propertyBuilder = new QueryBuilder();
+        propertyBuilder.incomingProperties = knownIncoming;
+        propertyBuilder.outgoingProperties = knownOutgoing;
+        propertyBuilder.usePPRels = true;
+        propertyBuilder.propertyKind = 'All';
+        propertyBuilder.limit = this.perRequestLimit;
 
         /**
          * @type {Array<DSSPropertyData> | null}
          */
-        let valid_suggestions = null;
+        let validSuggestions = null;
 
-        for (const cls of known_classes) {
-            const builder = property_builder.clone();
+        for (const cls of knownClasses) {
+            const builder = propertyBuilder.clone();
             builder.className = cls;
             builder.usePPRels = true;
             const params = builder.buildDSSParams();
             const props = await this.dssClient.getProperties(params, abortSignal);
-            if (valid_suggestions === null) {
-                valid_suggestions = props;
+            if (validSuggestions === null) {
+                validSuggestions = props;
             } else {
-                valid_suggestions = intersectSuggestions(valid_suggestions, props, (a, b) => a.name === b.name && a.type === b.type);
+                validSuggestions = intersectSuggestions(validSuggestions, props, (a, b) => a.name === b.name && a.type === b.type);
             }
         }
 
-        if (known_classes.length === 0) {
-            const params = property_builder.buildDSSParams();
+        if (knownClasses.length === 0) {
+            const params = propertyBuilder.buildDSSParams();
             const props = await this.dssClient.getProperties(params, abortSignal);
-            valid_suggestions = props;
+            validSuggestions = props;
         }
 
-        if (valid_suggestions === null) {
-            valid_suggestions = [];
+        if (validSuggestions === null) {
+            validSuggestions = [];
         }
 
-        const outgoing_properties = [...valid_suggestions].filter(p => p.type === "out").map(p => ({ value: p.name, count: p.count, display_name: p.display_name, local_name: p.local_name, prefix: p.prefix, ns_id: p.ns_id }));
+        const outgoingProperties = [...validSuggestions].filter(p => p.type === "out").map(p => ({ value: p.name, count: p.count, displayName: p.displayName, localName: p.localName, prefix: p.prefix, nsId: p.nsId }));
 
-        return outgoing_properties;
+        return outgoingProperties;
     }
 
     /**
@@ -616,44 +625,44 @@ class DSSAutocompletionClient {
      * @returns {Promise<ClassData[]>}
      */
     async suggestClasses(tripletValue, abortSignal = null) {
-        const known_value_classes = await this.tripletStore.getClassesOfElement(tripletValue);
-        const known_value_incoming = await this.tripletStore.getIncomingProperties(tripletValue);
-        const known_value_outgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
+        const knownValueClasses = await this.tripletStore.getClassesOfElement(tripletValue);
+        const knownValueIncoming = await this.tripletStore.getIncomingProperties(tripletValue);
+        const knownValueOutgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
 
-        const known_classes = known_value_classes.filter(c => !c.startsWith("?"));
-        const known_incoming = known_value_incoming.filter(p => !p.startsWith("?"));
-        const known_outgoing = known_value_outgoing.filter(p => !p.startsWith("?"));
+        const knownClasses = knownValueClasses.filter(c => !c.startsWith("?"));
+        const knownIncoming = knownValueIncoming.filter(p => !p.startsWith("?"));
+        const knownOutgoing = knownValueOutgoing.filter(p => !p.startsWith("?"));
 
-        const property_builder = new QueryBuilder();
-        property_builder.incomingProperties = known_incoming;
-        property_builder.outgoingProperties = known_outgoing;
-        property_builder.propertyKind = 'All';
-        property_builder.limit = this.perRequestLimit;
+        const propertyBuilder = new QueryBuilder();
+        propertyBuilder.incomingProperties = knownIncoming;
+        propertyBuilder.outgoingProperties = knownOutgoing;
+        propertyBuilder.propertyKind = 'All';
+        propertyBuilder.limit = this.perRequestLimit;
 
         /**
          * @type {Array<ClassData> | null}
          */
-        let valid_suggestions = null;
+        let validSuggestions = null;
 
-        for (const cls of known_classes) {
-            const builder = property_builder.clone();
+        for (const cls of knownClasses) {
+            const builder = propertyBuilder.clone();
             builder.className = cls;
             const params = builder.buildDSSParams();
             const classes = await this.dssClient.getClasses(params, abortSignal);
-            if (valid_suggestions === null) {
-                valid_suggestions = classes;
+            if (validSuggestions === null) {
+                validSuggestions = classes;
             } else {
-                valid_suggestions = intersectSuggestions(valid_suggestions, classes);
+                validSuggestions = intersectSuggestions(validSuggestions, classes);
             }
         }
 
-        if (known_classes.length === 0) {
-            const params = property_builder.buildDSSParams();
+        if (knownClasses.length === 0) {
+            const params = propertyBuilder.buildDSSParams();
             const classes = await this.dssClient.getClasses(params, abortSignal);
-            valid_suggestions = classes;
+            validSuggestions = classes;
         }
 
-        return [...(valid_suggestions ?? [])];
+        return [...(validSuggestions ?? [])];
 
     }
 }
@@ -749,11 +758,12 @@ async function getEndpoints(baseUrl, abortSignal = null) {
     const resp = await fetch(`${baseUrl}/info`, {
         signal: abortSignal
     });
-    const byte_data = await resp.text();
-    const data = JSON.parse(byte_data.toString());
+    const byteData = await resp.text();
+    const data = JSON.parse(byteData.toString());
     return data;
 }
 
+/* eslint-disable @typescript-eslint/naming-convention */
 module.exports = {
     DSSClient,
     QueryBuilder,
@@ -762,3 +772,4 @@ module.exports = {
     getEndpoints,
     intersectSuggestions
 };
+/* eslint-enable @typescript-eslint/naming-convention */
