@@ -492,7 +492,7 @@ class DSSAutocompletionClient {
     dssClient;
 
     /** @type {number} */
-    perRequestLimit = 200;
+    perRequestLimit = 2000;
 
     /**
      * 
@@ -510,7 +510,7 @@ class DSSAutocompletionClient {
      * @param {AbortSignal | null} abortSignal
      * @return {Promise<PropertyData[]>}
      */
-    async suggestIncomingProperties(tripletValue, abortSignal = null) {
+    async suggestIncomingProperties(tripletValue, abortSignal = null, queryBuilder = new QueryBuilder()) {
         const knownValueClasses = await this.tripletStore.getClassesOfElement(tripletValue);
         const knownValueIncoming = await this.tripletStore.getIncomingProperties(tripletValue);
         const knownValueOutgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
@@ -521,12 +521,15 @@ class DSSAutocompletionClient {
         const knownOutgoing = knownValueOutgoing.filter(p => !p.startsWith("?"));
 
 
-        const propertyBuilder = new QueryBuilder();
-        propertyBuilder.incomingProperties = knownIncoming;
-        propertyBuilder.outgoingProperties = knownOutgoing;
-        propertyBuilder.usePPRels = true;
-        propertyBuilder.propertyKind = 'All';
-        propertyBuilder.limit = this.perRequestLimit;
+        queryBuilder.incomingProperties = knownIncoming;
+        queryBuilder.outgoingProperties = knownOutgoing;
+        if (queryBuilder.usePPRels == null) {
+            queryBuilder.usePPRels = false;
+        }
+        if (queryBuilder.propertyKind == null) {
+            queryBuilder.propertyKind = 'ObjectExt';
+        }
+        queryBuilder.limit = this.perRequestLimit;
 
         /**
          * @type {Array<DSSPropertyData> | null}
@@ -534,7 +537,7 @@ class DSSAutocompletionClient {
         let validSuggestions = null;
 
         for (const cls of knownClasses) {
-            const builder = propertyBuilder.clone();
+            const builder = queryBuilder.clone();
             builder.className = cls;
             const params = builder.buildDSSParams();
             const props = await this.dssClient.getProperties(params, abortSignal);
@@ -546,7 +549,7 @@ class DSSAutocompletionClient {
         }
 
         if (knownClasses.length === 0) {
-            const params = propertyBuilder.buildDSSParams();
+            const params = queryBuilder.buildDSSParams();
             const props = await this.dssClient.getProperties(params, abortSignal);
             validSuggestions = props;
         }
