@@ -634,8 +634,14 @@ class DSSAutocompletionClient {
 
         const knownClasses = knownValueClasses.filter(c => !c.startsWith("?"));
         const knownIncoming = knownValueIncoming.filter(p => !p.startsWith("?"));
+        /**@type (string | {name: string, className: string})[] */
         const knownOutgoing = knownValueOutgoing.filter(p => !p.startsWith("?"));
-
+        for (const cls of knownClasses) {
+            knownOutgoing.unshift({
+                name: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                className: cls
+            });
+        }
         const propertyBuilder = new QueryBuilder();
         propertyBuilder.incomingProperties = knownIncoming;
         propertyBuilder.outgoingProperties = knownOutgoing;
@@ -643,28 +649,14 @@ class DSSAutocompletionClient {
         propertyBuilder.limit = this.perRequestLimit;
 
         /**
-         * @type {Array<ClassData> | null}
+         * @type {Array<ClassData>}
          */
-        let validSuggestions = null;
+        let validSuggestions;
 
-        for (const cls of knownClasses) {
-            const builder = propertyBuilder.clone();
-            builder.className = cls;
-            const params = builder.buildDSSParams();
-            const classes = await this.dssClient.getClasses(params, abortSignal);
-            if (validSuggestions === null) {
-                validSuggestions = classes;
-            } else {
-                validSuggestions = intersectSuggestions(validSuggestions, classes);
-            }
-        }
-
-        if (knownClasses.length === 0) {
+        {
             const params = propertyBuilder.buildDSSParams();
-            const classes = await this.dssClient.getClasses(params, abortSignal);
-            validSuggestions = classes;
+            validSuggestions = await this.dssClient.getClasses(params, abortSignal);
         }
-
         return [...(validSuggestions ?? [])];
 
     }
