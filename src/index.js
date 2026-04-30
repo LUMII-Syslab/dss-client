@@ -672,9 +672,9 @@ class DSSAutocompletionClient {
 
 class QueryBuilder {
 
-    /** @type {string[] | null} */
+    /** @type {({ name: string, className: string } | string)[] | null} */
     incomingProperties = null;
-    /** @type {string[] | null} */
+    /** @type {({ name: string, className: string } | string)[] | null} */
     outgoingProperties = null;
     /** @type {string | null} */
     className = null;
@@ -707,11 +707,31 @@ class QueryBuilder {
         }
         if (this.incomingProperties !== null) {
             params.element.pList = params.element.pList ?? {};
-            params.element.pList.in = this.incomingProperties.map(v => ({ name: v, type: 'in' }));
+            params.element.pList.in = this.incomingProperties.map((v) => {
+                if (typeof v == "string") {
+                    return { name: v, type: 'in' };
+                } else {
+                    return {
+                        name: v.name,
+                        type: 'in',
+                        className: v.className
+                    };
+                }
+            });
         }
         if (this.outgoingProperties !== null) {
             params.element.pList = params.element.pList ?? {};
-            params.element.pList.out = this.outgoingProperties.map(v => ({ name: v, type: 'out' }));
+            params.element.pList.out = this.outgoingProperties.map((v) => {
+                if (typeof v == "string") {
+                    return { name: v, type: 'out' };
+                } else {
+                    return {
+                        name: v.name,
+                        type: 'out',
+                        className: v.className
+                    };
+                }
+            });
         }
         if (this.className !== null) {
             params.element.className = this.className;
