@@ -855,10 +855,6 @@ class QueryBuilder {
             builder.incomingProperties = [];
             builder.outgoingProperties = [];
             builder.className = cls;
-            builder.incomingProperties.push({
-                name: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-                className: cls
-            });
             classBuilders.push(builder);
         }
 
