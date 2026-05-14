@@ -24,8 +24,8 @@
  * @property {Object} element
  * @property {string} [element.className]
  * @property {Object} [element.pList]
- * @property {Array<{name: string, type?: 'in', id?: number}>} [element.pList.in]
- * @property {Array<{name: string, type?: 'out', id?: number}>} [element.pList.out]
+ * @property {Array<{name: string, type?: 'in', id?: number }>} [element.pList.in]
+ * @property {Array<{name: string, type?: 'out', id?: number, className?: string}>} [element.pList.out]
  * @property {string} [element.uriIndividual]
  */
 
@@ -289,11 +289,15 @@ class DSSClient {
     }
 
     /**
+     * Fetches properties from DSS using provided parameters
      * @param {DSSParams} params
      * @param {AbortSignal | null} abortSignal
+     * @param {boolean} uncompressed When true, splits provided parameters 
+     * into multiple requests
+     * that will provide more accurate results, while usually taking longer.
      * @returns {Promise<DSSPropertyData[]>}
      */
-    async getProperties(params, abortSignal = null) {
+    async getProperties(params, abortSignal = null, uncompressed = false) {
         const endpointInfo = await this.endpointInfo;
         if (params.main === undefined) {
             params.main = {};
@@ -305,8 +309,6 @@ class DSSClient {
             params.main.propertyKind = 'All';
         }
         const limit = params.main.limit;
-
-        const ontRequests = [];
 
         const ontology = await this.ontology;
         if (ontology === null) {
@@ -320,31 +322,61 @@ class DSSClient {
         params.main.schemaName = endpoint.display_name;
         params.main.endpointUrl = endpoint.sparql_url;
 
-        const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getProperties`, {
-            method: 'POST',
-            headers: {
-                // eslint-disable-next-line @typescript-eslint/naming-convention
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(params),
-            signal: abortSignal,
-        });
-        const byteData = await resp.text();
-        const data = JSON.parse(byteData.toString());
-        if (!data.complete) {
-            if (this.traceLog) {
-                console.warn(`Warning: fetched properties for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
+        if (!uncompressed) {
+
+            const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getProperties`, {
+                method: 'POST',
+                headers: {
+                    // eslint-disable-next-line @typescript-eslint/naming-convention
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(params),
+                signal: abortSignal,
+            });
+            const byteData = await resp.text();
+            const data = JSON.parse(byteData.toString());
+            if (!data.complete) {
+                if (this.traceLog) {
+                    console.warn(`Warning: fetched properties for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
+                }
             }
-        }
-        if (!isPropertyResponse(data)) {
-            throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(data)}`);
+            if (!isPropertyResponse(data)) {
+                throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(data)}`);
+            }
+
+            return data.data.map(
+                (p) => ({
+                    name: p.iri,
+                    type: p.mark,
+                    count: Number(p.o),
+                    displayName: p.display_name,
+                    localName: p.local_name,
+                    prefix: p.prefix,
+                    nsId: p.ns_id
+                })
+            );
+        } else {
+            const builder = QueryBuilder.prototype.fromDssParams(params);
+            const decompressed = builder.decompressParams();
+            const allQueries = [...decompressed.classQueries, ...decompressed.incomingPropertyQueries, ...decompressed.outgoingPropertyQueries];
+            /** @type {DSSPropertyData[] | null} */
+            let results = null;
+            for (const query of allQueries) {
+                const queryParams = query.buildDSSParams();
+                const queryResult = await this.getProperties(queryParams, abortSignal, false);
+                if (results === null) {
+                    results = queryResult;
+                } else {
+                    results = intersectSuggestions(results, queryResult, (a, b) => a.name === b.name && a.type === b.type);
+                }
+            }
+
+            return results ?? [];
         }
 
-        ontRequests.push(data);
 
-        return data.data.map(
-            (p) => ({ name: p.iri, type: p.mark, count: Number(p.o), displayName: p.display_name, localName: p.local_name, prefix: p.prefix, nsId: p.ns_id })
-        );
+
+
     }
 
     /**
@@ -764,6 +796,94 @@ class QueryBuilder {
         return clone;
     }
 
+    /**
+     * Constructs a Query builder from DSSParams.
+     * @param {DSSParams} params 
+     */
+    fromDssParams(params) {
+        const builder = new QueryBuilder();
+        builder.className = params.element.className ?? null;
+        builder.instanceIRI = params.element.uriIndividual ?? null;
+        if (params.element.pList) {
+            if (params.element.pList.in) {
+                builder.incomingProperties = params.element.pList.in.map(p =>
+                    p.name
+                );
+            }
+            if (params.element.pList.out) {
+                builder.outgoingProperties = params.element.pList.out.map(p =>
+                    typeof p === "string" ? p : p.name
+                );
+            }
+        }
+        builder.limit = params.main.limit ?? 200;
+        builder.ontology = params.main.schemaName ?? null;
+        builder.usePPRels = params.main.use_pp_rels ?? null;
+        builder.propertyKind = params.main.propertyKind ?? null;
+        builder.linksWithTargets = params.main.linksWithTargets ?? null;
+        builder.showPrefixes = params.main.show_prefixes ?? null;
+        return builder;
+
+    }
+
+
+    /**
+     * Splits the provided parameters into multiple QueryBuilders
+     * to fetch more accurate results from DSS.
+     * For example, if multiple classes are provided, 
+     * it will create multiple QueryBuilders with one class each
+     * Same for properties.
+     * @returns {{classQueries: QueryBuilder[], incomingPropertyQueries: QueryBuilder[], outgoingPropertyQueries: QueryBuilder[]}}
+     */
+    decompressParams() {
+        const classBuilders = [];
+        const incomingPropertyBuilders = [];
+        const outgoingPropertyBuilders = [];
+        const classes = this.className !== null ? [this.className] : [];
+        for (const property of this.incomingProperties ?? []) {
+            if (typeof property === "object") {
+                classes.push(property.className);
+            }
+        }
+        for (const property of this.outgoingProperties ?? []) {
+            if (typeof property === "object") {
+                classes.push(property.className);
+            }
+        }
+        for (const cls of classes) {
+            const builder = this.clone();
+            builder.incomingProperties = [];
+            builder.outgoingProperties = [];
+            builder.className = cls;
+            builder.incomingProperties.push({
+                name: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                className: cls
+            });
+            classBuilders.push(builder);
+        }
+
+        for (const property of this.incomingProperties ?? []) {
+            const builder = this.clone();
+            builder.incomingProperties = [property];
+            builder.outgoingProperties = [];
+            builder.className = null;
+            incomingPropertyBuilders.push(builder);
+        }
+
+        for (const property of this.outgoingProperties ?? []) {
+            const builder = this.clone();
+            builder.incomingProperties = [];
+            builder.outgoingProperties = [property];
+            builder.className = null;
+            outgoingPropertyBuilders.push(builder);
+        }
+        return {
+            classQueries: classBuilders,
+            incomingPropertyQueries: incomingPropertyBuilders,
+            outgoingPropertyQueries: outgoingPropertyBuilders
+        };
+
+    }
 }
 
 /**
