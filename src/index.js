@@ -542,7 +542,7 @@ class DSSAutocompletionClient {
      * @param {AbortSignal | null} abortSignal
      * @return {Promise<PropertyData[]>}
      */
-    async suggestIncomingProperties(tripletValue, abortSignal = null, queryBuilder = new QueryBuilder()) {
+    async suggestIncomingProperties(tripletValue, abortSignal = null, queryBuilder = new QueryBuilder(), uncompressed = false) {
         const knownValueClasses = await this.tripletStore.getClassesOfElement(tripletValue);
         const knownValueIncoming = await this.tripletStore.getIncomingProperties(tripletValue);
         const knownValueOutgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
@@ -572,7 +572,7 @@ class DSSAutocompletionClient {
             const builder = queryBuilder.clone();
             builder.className = cls;
             const params = builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal);
+            const props = await this.dssClient.getProperties(params, abortSignal, uncompressed);
             if (validSuggestions === null) {
                 validSuggestions = props;
             } else {
@@ -582,7 +582,7 @@ class DSSAutocompletionClient {
 
         if (knownClasses.length === 0) {
             const params = queryBuilder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal);
+            const props = await this.dssClient.getProperties(params, abortSignal, uncompressed);
             validSuggestions = props;
         }
 
@@ -603,7 +603,7 @@ class DSSAutocompletionClient {
      * @param {AbortSignal | null} abortSignal
      * @return {Promise<PropertyData[]>}
      */
-    async suggestOutgoingProperties(tripletValue, abortSignal = null) {
+    async suggestOutgoingProperties(tripletValue, abortSignal = null, uncompressed = false) {
         const knownValueClasses = await this.tripletStore.getClassesOfElement(tripletValue);
         const knownValueIncoming = await this.tripletStore.getIncomingProperties(tripletValue);
         const knownValueOutgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
@@ -630,7 +630,7 @@ class DSSAutocompletionClient {
             builder.className = cls;
             builder.usePPRels = true;
             const params = builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal);
+            const props = await this.dssClient.getProperties(params, abortSignal, uncompressed);
             if (validSuggestions === null) {
                 validSuggestions = props;
             } else {
@@ -640,7 +640,7 @@ class DSSAutocompletionClient {
 
         if (knownClasses.length === 0) {
             const params = propertyBuilder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal);
+            const props = await this.dssClient.getProperties(params, abortSignal, uncompressed);
             validSuggestions = props;
         }
 
