@@ -681,10 +681,9 @@ class DSSAutocompletionClient {
 
         const knownClasses = knownValueClasses.filter(c => !c.startsWith("?"));
         const knownIncoming = knownValueIncoming.filter(p => !p.startsWith("?"));
-        const validClassifiers = new Set(["rdf:type", "a", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"]);
         /**@type (string | {name: string, className: string})[] */
         const knownOutgoing = knownValueOutgoing.filter(
-            p => !p.startsWith("?") && !validClassifiers.has(p));
+            p => !p.startsWith("?"));
         for (const cls of knownClasses) {
             knownOutgoing.unshift({
                 name: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
