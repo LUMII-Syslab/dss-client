@@ -358,7 +358,7 @@ class DSSClient {
         } else {
             const builder = QueryBuilder.prototype.fromDssParams(params);
             const decompressed = builder.decompressParams();
-            const allQueries = [...decompressed.classQueries, ...decompressed.incomingPropertyQueries, ...decompressed.outgoingPropertyQueries];
+            const allQueries = [...decompressed.classQueriesForPropertyRequests, ...decompressed.incomingPropertyQueries, ...decompressed.outgoingPropertyQueries];
             /** @type {DSSPropertyData[] | null} */
             let results = null;
             for (const query of allQueries) {
@@ -403,27 +403,42 @@ class DSSClient {
         params.main.schemaName = endpoint.display_name;
         params.main.endpointUrl = endpoint.sparql_url;
 
-        const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getClasses`, {
-            method: 'POST',
-            headers: {
-                // eslint-disable-next-line @typescript-eslint/naming-convention
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(params),
-            signal: abortSignal,
-        });
-        const byteData = await resp.text();
+        const builder = QueryBuilder.prototype.fromDssParams(params);
+        const decompressed = builder.decompressParams();
+        const queries = [...decompressed.classQueriesForClassRequests, ...decompressed.incomingPropertyQueries, ...decompressed.outgoingPropertyQueries];
+        /** @type {ClassData[] | null} */
+        let allResults = null;
+        for (const query of queries) {
+            const queryParams = query.buildDSSParams();
+            const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getClasses`, {
+                method: 'POST',
+                headers: {
+                    // eslint-disable-next-line @typescript-eslint/naming-convention
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(queryParams),
+                signal: abortSignal,
+            });
+            const byteData = await resp.text();
 
-        const classes = JSON.parse(byteData.toString());
-        if (!classes.complete) {
-            if (this.traceLog) {
-                console.warn(`Warning: fetched classes for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
+            const classes = JSON.parse(byteData.toString());
+            if (!classes.complete) {
+                if (this.traceLog) {
+                    console.warn(`Warning: fetched classes for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
+                }
+            }
+            if (!isClassResponse(classes)) {
+                throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(classes)}`);
+            }
+            const classData = classes.data.map(c => ({ value: c.iri, count: Number(c.cnt) }));
+            if (allResults === null) {
+                allResults = classData;
+            } else {
+                allResults = intersectSuggestions(allResults, classData, (a, b) => a.value === b.value);
             }
         }
-        if (!isClassResponse(classes)) {
-            throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(classes)}`);
-        }
-        return classes.data.map(c => ({ value: c.iri, count: Number(c.cnt) }));
+
+        return allResults ?? [];
     }
 
     /**
@@ -833,12 +848,13 @@ class QueryBuilder {
      * For example, if multiple classes are provided, 
      * it will create multiple QueryBuilders with one class each
      * Same for properties.
-     * @returns {{classQueries: QueryBuilder[], incomingPropertyQueries: QueryBuilder[], outgoingPropertyQueries: QueryBuilder[]}}
+     * @returns {{classQueriesForPropertyRequests: QueryBuilder[], classQueriesForClassRequests: QueryBuilder[], incomingPropertyQueries: QueryBuilder[], outgoingPropertyQueries: QueryBuilder[]}}
      */
     decompressParams() {
         const classBuilders = [];
         const incomingPropertyBuilders = [];
         const outgoingPropertyBuilders = [];
+        const classForClassBuilders = [];
         const classes = this.className !== null ? [this.className] : [];
         for (const property of this.incomingProperties ?? []) {
             if (typeof property === "object") {
@@ -856,6 +872,16 @@ class QueryBuilder {
             builder.outgoingProperties = [];
             builder.className = cls;
             classBuilders.push(builder);
+            const classViaPropertyBuilder = this.clone();
+            classViaPropertyBuilder.className = null;
+            classViaPropertyBuilder.incomingProperties = [];
+            classViaPropertyBuilder.outgoingProperties = [
+                {
+                    className: cls,
+                    name: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                }
+            ];
+            classForClassBuilders.push(classViaPropertyBuilder);
         }
 
         for (const property of this.incomingProperties ?? []) {
@@ -874,9 +900,10 @@ class QueryBuilder {
             outgoingPropertyBuilders.push(builder);
         }
         return {
-            classQueries: classBuilders,
+            classQueriesForPropertyRequests: classBuilders,
             incomingPropertyQueries: incomingPropertyBuilders,
-            outgoingPropertyQueries: outgoingPropertyBuilders
+            outgoingPropertyQueries: outgoingPropertyBuilders,
+            classQueriesForClassRequests: classForClassBuilders
         };
 
     }
