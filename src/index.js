@@ -301,7 +301,7 @@ class DSSClient {
      * that will provide more accurate results, while usually taking longer.
      * @returns {Promise<DSSPropertyData[]>}
      */
-    async getProperties(params, abortSignal = null, uncompressed = false) {
+    async getProperties(params, abortSignal = null, uncompressed = true) {
         const endpointInfo = await this.endpointInfo;
         if (params.main === undefined) {
             params.main = {};
@@ -489,9 +489,9 @@ class TripletStore {
 
     /**
      *  @param {string} tripletValue 
-     * @returns {Promise<string[]>}
+     * @returns {string[]}
      * */
-    async getIncomingProperties(tripletValue) {
+    getIncomingProperties(tripletValue) {
         return this.triplets
             .filter(t => t.object === tripletValue)
             .map(t => t.predicate)
@@ -500,9 +500,9 @@ class TripletStore {
 
     /**
      *  @param {string} tripletValue
-     * @returns {Promise<string[]>}
+     * @returns {string[]}
      * */
-    async getOutgoingProperties(tripletValue) {
+    getOutgoingProperties(tripletValue) {
         return this.triplets
             .filter(t => t.subject === tripletValue)
             .map(t => t.predicate)
@@ -511,9 +511,9 @@ class TripletStore {
 
     /**
      * @param {string} tripletValue
-     * @return {Promise<string[]>}
+     * @return {string[]}
      * */
-    async getClassesOfElement(tripletValue) {
+    getClassesOfElement(tripletValue) {
         const validClassifiers = new Set(["rdf:type", "a", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"]);
         return this.triplets
             .filter(t => validClassifiers.has(t.predicate) && t.subject === tripletValue)
