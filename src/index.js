@@ -235,6 +235,10 @@ function isClassResponse(response) {
     return true;
 }
 
+/**
+ * An opinionated client for fetching properties and classes
+ * from a DSS endpoint.
+ */
 class DSSClient {
 
     /**
@@ -380,6 +384,10 @@ class DSSClient {
     }
 
     /**
+     * Fetches classes from DSS, decompressing the parameters into multiple requests
+     * if necessary to get more accurate results.
+     * For example, multiple property constraints will be split
+     * into one request per property and intersected.
      * @param {DSSParams} params 
      * @param {AbortSignal | null} abortSignal
      * @returns {Promise<ClassData[]>}
@@ -466,6 +474,14 @@ class DSSClient {
     }
 }
 
+/**
+ * A primitive in-memory store of triplets,
+ * primarily used to provide query context for the autocompletion client.
+ * Contains methods to fetch incoming, outgoing properties and classes of a given triplet value.
+ * Said value can be resource, literal or variable.
+ * The returned values are obtained with no additional context or recursive reasoning.
+ * Mostly useable as a thin wrapper around an array of triplets.
+ */
 class TripletStore {
 
     /** @type {Array<{subject: string, predicate: string, object: string}>} */
@@ -510,6 +526,10 @@ class TripletStore {
 
 
 /**
+ * Intersects two sets of suggestions, returning only those that are present in both sets.
+ * Suggestions must have a count property, which will be set to the minimum of the counts in both sets.
+ * While not strictly correct, a minimum function is a reasonable heuristic
+ * for reasoning about item counts without performing expensive validation.
  * @template T
  * @param {Set<T & {count: number}> | (T & {count: number})[]} setA 
  * @param {Set<T & {count: number}> | (T & {count: number})[]} setB
