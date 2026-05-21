@@ -1,11 +1,11 @@
 # DSS (Data Shape Server) Client
 
-This project contains an experimental client library for a Data Shape Server (https://github.com/LUMII-Syslab/data-shape-server) that allows to write an adapter to integrate DSS with SPARQL editors.
+This project contains a client library for a Data Shape Server 
+(https://github.com/LUMII-Syslab/data-shape-server) that provides
+some utility classes for querying shape data for ontologies.
 
-# Setup
-
-1. Clone this repository.
-
-2. Install dependencies by running `npm install` in the root of this project.
-
-3. Build the project using `npm run build`.
+This package provides 4 classes: DSSClient, TripletStore, QueryBuilder, DSSAutocompletionClient:
+- DSSClient: Provides a thin wrapper for Data Shape Server web API.
+- TripletStore: Wraps an array of RDF triples, providing some utility methods.
+- QueryBuilder: A typed parameter builder for improving request experience.
+- DSSAutocompletionClient: Gathers context from a tripletstore and uses a DSSClient instance to create autocompletion suggestions for variables.
