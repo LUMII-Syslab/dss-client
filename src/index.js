@@ -605,6 +605,7 @@ class DSSClient {
  * Said value can be resource, literal or variable.
  * The returned values are obtained with no additional context or recursive reasoning.
  * Mostly useable as a thin wrapper around an array of triplets.
+ * @implements {TripletStoreLike}
  */
 class TripletStore {
 
@@ -613,9 +614,9 @@ class TripletStore {
 
     /**
      *  @param {string} tripletValue 
-     * @returns {string[]}
+     * @returns {Promise<string[]>}
      * */
-    getIncomingProperties(tripletValue) {
+    async getIncomingProperties(tripletValue) {
         return this.triplets
             .filter(t => t.object === tripletValue)
             .map(t => t.predicate)
@@ -624,9 +625,9 @@ class TripletStore {
 
     /**
      *  @param {string} tripletValue
-     * @returns {string[]}
+     * @returns {Promise<string[]>}
      * */
-    getOutgoingProperties(tripletValue) {
+    async getOutgoingProperties(tripletValue) {
         return this.triplets
             .filter(t => t.subject === tripletValue)
             .map(t => t.predicate)
@@ -635,9 +636,9 @@ class TripletStore {
 
     /**
      * @param {string} tripletValue
-     * @return {string[]}
+     * @return {Promise<string[]>}
      * */
-    getClassesOfElement(tripletValue) {
+    async getClassesOfElement(tripletValue) {
         const validClassifiers = new Set(["rdf:type", "a", "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"]);
         return this.triplets
             .filter(t => validClassifiers.has(t.predicate) && t.subject === tripletValue)
