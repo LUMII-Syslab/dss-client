@@ -259,13 +259,7 @@ class DefaultDSSRequestProvider {
     /** 
      * @type {Promise<{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]>}
      * */
-    endpointInfo = (async () => {
-        const resp = await fetch(`${this.baseUrl}/info`, {});
-        const byteData = await resp.text();
-        /** @type {{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]} */
-        const data = JSON.parse(byteData.toString());
-        return data;
-    })();
+    endpointInfo;
 
     /**@type {string} */
     baseUrl;
@@ -306,7 +300,13 @@ class DefaultDSSRequestProvider {
      */
     constructor(baseUrl) {
         this.baseUrl = baseUrl;
-        this.endpointInfo = this.getEndpoints();
+        this.endpointInfo = (async () => {
+            const resp = await fetch(`${baseUrl}/info`, {});
+            const byteData = await resp.text();
+            /** @type {{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]} */
+            const data = JSON.parse(byteData.toString());
+            return data;
+        })();
     }
 
     /**
