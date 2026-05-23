@@ -11,8 +11,7 @@
     "test": "jest src",
     "build": "tsc",
     "prepublishOnly": "npm run build",
-    "prepare": "npm run build",
-    "postinstall": "npm run build"
+    "prepare": "npm run build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
