@@ -9,7 +9,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "test": "jest src",
-    "build": "npx tsc",
+    "build": "tsc",
     "prepublishOnly": "npm run build",
     "prepare": "npm run build",
     "postinstall": "npm run build"
