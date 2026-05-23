@@ -1,4 +1,7 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 //@ts-check
+
+
 
 /**
  * @typedef {Object} DSSParams
@@ -1089,6 +1092,8 @@ module.exports = {
     TripletStore,
     DSSAutocompletionClient,
     DefaultDSSRequestProvider,
-    intersectSuggestions
+    intersectSuggestions,
+    queryLexer: require('./queryLexer'),
+    suggestionComparator: require('./suggestionComparator')
 };
 /* eslint-enable @typescript-eslint/naming-convention */
