@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 //@ts-check
 
+const queryBuilderModule = require('./queryLexer');
+const suggestionComparatorModule = require('./suggestionComparator');
 
 
 /**
@@ -1093,7 +1095,7 @@ module.exports = {
     DSSAutocompletionClient,
     DefaultDSSRequestProvider,
     intersectSuggestions,
-    queryLexer: require('./queryLexer'),
-    suggestionComparator: require('./suggestionComparator')
+    queryBuilderModule,
+    suggestionComparatorModule
 };
 /* eslint-enable @typescript-eslint/naming-convention */
