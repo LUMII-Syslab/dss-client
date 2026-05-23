@@ -236,11 +236,39 @@ function isClassResponse(response) {
 }
 
 /**
- * An opinionated client for fetching properties and classes
- * from a DSS endpoint.
+ * An unopinionated interface for fetching properties and classes from a DSS endpoint.
+ * Provided methods should fetch properties and classes based on provided parameters
+ * without performing any opinionated decompression. 
+ * Usually used as an adapter between the DSSCLient and the actual endpoint, but can be implemented in other ways as well.
+ * @typedef {Object} DSSRequestProvider 
+ * @property {(params: DSSParams, abortSignal: AbortSignal | null) => Promise<{data: DSSPropertyData[], complete: boolean}>} getProperties Fetches properties from DSS based on provided parameters
+ * @property {(params: DSSParams, abortSignal: AbortSignal | null) => Promise<{data: ClassData[], complete: boolean}>} getClasses Fetches classes from DSS based on provided parameters
+ * @property {() => Promise<NamespaceData[]>} getNamespaces Fetches namespaces from DSS for the current ontology
+ * @property {() => Promise<Array<{name: string, dbSchemaName: string, schemaName: string, sparqlUrl: string}>>} getOntologyList Fetches a list of available ontologies from DSS
+ * @property {() => Promise<string>} getOntology Fetches the currently set ontology from DSS
  */
-class DSSClient {
 
+/**
+ * A default implementation of the DSSRequestProvider interface, allowing to specify endpoint
+ * url and provides ontology management.
+ * @implements {DSSRequestProvider} 
+ * @borrows  DSSRequestProvider#getClasses as getClasses 
+ * */
+class DefaultDSSRequestProvider {
+
+    /** 
+     * @type {Promise<{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]>}
+     * */
+    endpointInfo = (async () => {
+        const resp = await fetch(`${this.baseUrl}/info`, {});
+        const byteData = await resp.text();
+        /** @type {{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]} */
+        const data = JSON.parse(byteData.toString());
+        return data;
+    })();
+
+    /**@type {string} */
+    baseUrl;
     /**
      * @type {Promise<string | null>}
      */
@@ -272,24 +300,139 @@ class DSSClient {
         }
     }
 
-    /**@type {string} */
-    baseUrl;
-
-    /**@type {boolean} */
-    traceLog = false;
-
-    /** 
-     * @type {Promise<{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]>}
-     * */
-    endpointInfo;
-
     /**
      * 
      * @param {string} baseUrl 
      */
     constructor(baseUrl) {
         this.baseUrl = baseUrl;
-        this.endpointInfo = getEndpoints(baseUrl);
+        this.endpointInfo = this.getEndpoints();
+    }
+
+    /**
+     * @param {DSSParams} params 
+     * @param {AbortSignal | null} abortSignal 
+     * @returns {Promise<{data: ClassData[], complete: boolean}>}
+     */
+    async getClasses(params, abortSignal) {
+        const ontology = await this.ontology;
+        if (ontology === null) {
+            throw new Error("No ontology specified for DSSRequestProvider");
+        }
+        const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getClasses`, {
+            method: 'POST',
+            headers: {
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(params),
+            signal: abortSignal,
+        });
+        const byteData = await resp.text();
+
+        const classes = JSON.parse(byteData.toString());
+        if (!isClassResponse(classes)) {
+            throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(classes)}`);
+        }
+        const classData = classes.data.map(c => ({ value: c.iri, count: Number(c.cnt) }));
+        return { data: classData, complete: classes.complete };
+    }
+
+    /**
+     * @param {DSSParams} params 
+     * @param {AbortSignal | null} abortSignal 
+     * @returns {Promise<{data: DSSPropertyData[], complete: boolean}>}
+     */
+    async getProperties(params, abortSignal) {
+        const ontology = await this.ontology;
+        if (ontology === null) {
+            throw new Error("No ontology specified for DSSRequestProvider");
+        }
+        const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getProperties`, {
+            method: 'POST',
+            headers: {
+                // eslint-disable-next-line @typescript-eslint/naming-convention
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(params),
+            signal: abortSignal,
+        });
+        const byteData = await resp.text();
+        const data = JSON.parse(byteData.toString());
+        if (!isPropertyResponse(data)) {
+            throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(data)}`);
+        }
+        const propertyData = data.data.map(
+            (p) => ({
+                name: p.iri,
+                type: p.mark,
+                count: Number(p.o),
+                displayName: p.display_name,
+                localName: p.local_name,
+                prefix: p.prefix,
+                nsId: p.ns_id
+            })
+        );
+        return { data: propertyData, complete: data.complete };
+    }
+
+    /**
+     * @returns {Promise<NamespaceData[]>}
+     */
+    async getNamespaces() {
+        const ontology = await this.ontology;
+        const response = await fetch(`${this.baseUrl}/ontologies/${ontology}/ns`, {
+        });
+        const data = await response.json();
+        if (!isNamespaceDataArray(data)) {
+            throw new Error(`Received bad response from DSS endpoint for namespaces. Response: ${JSON.stringify(data)}`);
+        }
+        return data;
+    }
+
+    /**
+     * 
+     * @returns {Promise<{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]>}
+     */
+    async getEndpoints() {
+        return this.endpointInfo;
+    }
+
+    async getOntologyList() {
+        const endpointInfo = await this.endpointInfo;
+        return endpointInfo.map(e => ({ name: e.display_name, dbSchemaName: e.db_schema_name, schemaName: e.schema_name, sparqlUrl: e.sparql_url }));
+    }
+
+    async getOntology() {
+        const ontology = await this.ontology;
+        if (ontology === null) {
+            throw new Error("No ontology specified for DSSRequestProvider");
+        }
+        return ontology;
+    }
+
+}
+
+
+/**
+ * An opinionated client for fetching properties and classes
+ * from a DSS endpoint.
+ */
+class DSSClient {
+
+    /**@type {boolean} */
+    traceLog = false;
+
+    /** @type {DSSRequestProvider} */
+    requestProvider;
+
+
+    /**
+     * 
+     * @param {DSSRequestProvider} requestProvider
+     */
+    constructor(requestProvider) {
+        this.requestProvider = requestProvider;
     }
 
     /**
@@ -302,7 +445,7 @@ class DSSClient {
      * @returns {Promise<DSSPropertyData[]>}
      */
     async getProperties(params, abortSignal = null, uncompressed = true) {
-        const endpointInfo = await this.endpointInfo;
+        const endpointInfo = await this.requestProvider.getOntologyList();
         if (params.main === undefined) {
             params.main = {};
         }
@@ -312,53 +455,52 @@ class DSSClient {
         if (!(params.main?.propertyKind)) {
             params.main.propertyKind = 'All';
         }
-        const limit = params.main.limit;
 
-        const ontology = await this.ontology;
+        const ontology = await this.requestProvider.getOntology();
         if (ontology === null) {
             throw new Error("No ontology specified for DSSClient");
         }
 
-        const endpoint = endpointInfo.find(e => e.db_schema_name === ontology);
+        const endpoint = endpointInfo.find(e => e.dbSchemaName === ontology);
         if (!endpoint) {
             throw new Error(`Endpoint not found for ontology ${ontology}`);
         }
-        params.main.schemaName = endpoint.display_name;
-        params.main.endpointUrl = endpoint.sparql_url;
+        params.main.schemaName = endpoint.name;
+        params.main.endpointUrl = endpoint.sparqlUrl;
 
         if (!uncompressed) {
+            return this.requestProvider.getProperties(params, abortSignal).then(response => response.data);
+            // const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getProperties`, {
+            //     method: 'POST',
+            //     headers: {
+            //         // eslint-disable-next-line @typescript-eslint/naming-convention
+            //         'Content-Type': 'application/json',
+            //     },
+            //     body: JSON.stringify(params),
+            //     signal: abortSignal,
+            // });
+            // const byteData = await resp.text();
+            // const data = JSON.parse(byteData.toString());
+            // if (!data.complete) {
+            //     if (this.traceLog) {
+            //         console.warn(`Warning: fetched properties for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
+            //     }
+            // }
+            // if (!isPropertyResponse(data)) {
+            //     throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(data)}`);
+            // }
 
-            const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getProperties`, {
-                method: 'POST',
-                headers: {
-                    // eslint-disable-next-line @typescript-eslint/naming-convention
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(params),
-                signal: abortSignal,
-            });
-            const byteData = await resp.text();
-            const data = JSON.parse(byteData.toString());
-            if (!data.complete) {
-                if (this.traceLog) {
-                    console.warn(`Warning: fetched properties for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
-                }
-            }
-            if (!isPropertyResponse(data)) {
-                throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(data)}`);
-            }
-
-            return data.data.map(
-                (p) => ({
-                    name: p.iri,
-                    type: p.mark,
-                    count: Number(p.o),
-                    displayName: p.display_name,
-                    localName: p.local_name,
-                    prefix: p.prefix,
-                    nsId: p.ns_id
-                })
-            );
+            // return data.data.map(
+            //     (p) => ({
+            //         name: p.iri,
+            //         type: p.mark,
+            //         count: Number(p.o),
+            //         displayName: p.display_name,
+            //         localName: p.local_name,
+            //         prefix: p.prefix,
+            //         nsId: p.ns_id
+            //     })
+            // );
         } else {
             const builder = QueryBuilder.prototype.fromDssParams(params);
             const decompressed = builder.decompressParams();
@@ -367,7 +509,7 @@ class DSSClient {
             let results = null;
             for (const query of allQueries) {
                 const queryParams = query.buildDSSParams();
-                const queryResult = await this.getProperties(queryParams, abortSignal, false);
+                const queryResult = await this.requestProvider.getProperties(queryParams, abortSignal).then(response => response.data);
                 if (results === null) {
                     results = queryResult;
                 } else {
@@ -393,7 +535,7 @@ class DSSClient {
      * @returns {Promise<ClassData[]>}
      */
     async getClasses(params, abortSignal = null) {
-        const endpointInfo = await this.endpointInfo;
+        const endpointInfo = await this.requestProvider.getOntologyList();
 
         if (!(params.main?.limit)) {
             if (params.main === undefined) {
@@ -401,15 +543,14 @@ class DSSClient {
             }
             params.main.limit = 500;
         }
-        const limit = params.main.limit;
 
-        const ontology = await this.ontology;
-        const endpoint = endpointInfo.find(e => e.db_schema_name === ontology);
+        const ontology = await this.requestProvider.getOntology();
+        const endpoint = endpointInfo.find(e => e.dbSchemaName === ontology);
         if (!endpoint) {
             throw new Error(`Endpoint not found for ontology ${ontology}`);
         }
-        params.main.schemaName = endpoint.display_name;
-        params.main.endpointUrl = endpoint.sparql_url;
+        params.main.schemaName = endpoint.name;
+        params.main.endpointUrl = endpoint.sparqlUrl;
 
         const builder = QueryBuilder.prototype.fromDssParams(params);
         const decompressed = builder.decompressParams();
@@ -418,27 +559,7 @@ class DSSClient {
         let allResults = null;
         for (const query of queries) {
             const queryParams = query.buildDSSParams();
-            const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getClasses`, {
-                method: 'POST',
-                headers: {
-                    // eslint-disable-next-line @typescript-eslint/naming-convention
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(queryParams),
-                signal: abortSignal,
-            });
-            const byteData = await resp.text();
-
-            const classes = JSON.parse(byteData.toString());
-            if (!classes.complete) {
-                if (this.traceLog) {
-                    console.warn(`Warning: fetched classes for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
-                }
-            }
-            if (!isClassResponse(classes)) {
-                throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(classes)}`);
-            }
-            const classData = classes.data.map(c => ({ value: c.iri, count: Number(c.cnt) }));
+            const classData = await this.requestProvider.getClasses(queryParams, abortSignal).then(response => response.data);
             if (allResults === null) {
                 allResults = classData;
             } else {
@@ -454,14 +575,7 @@ class DSSClient {
      * @returns {Promise<NamespaceData[]>}
      */
     async getNamespaces() {
-        const ontology = await this.ontology;
-        const response = await fetch(`${this.baseUrl}/ontologies/${ontology}/ns`, {
-        });
-        const data = await response.json();
-        if (!isNamespaceDataArray(data)) {
-            throw new Error(`Received bad response from DSS endpoint for namespaces. Response: ${JSON.stringify(data)}`);
-        }
-        return data;
+        return this.requestProvider.getNamespaces();
     }
 
     /**
@@ -469,10 +583,20 @@ class DSSClient {
      * @returns {Promise<Array<{name: string, dbSchemaName: string}>>}
      */
     async getOntologyList() {
-        const endpointInfo = await this.endpointInfo;
-        return endpointInfo.map(e => ({ name: e.display_name, dbSchemaName: e.db_schema_name }));
+        const endpointInfo = await this.requestProvider.getOntologyList();
+        return endpointInfo;
     }
 }
+
+/**
+ * Interface for a store of triplets, providing
+ * methods to fetch incoming, outgoing properties 
+ * and classes of a given triplet value.
+ * @typedef {Object} TripletStoreLike
+ * @property {(tripletValue: string) => Promise<string[]>} getIncomingProperties
+ * @property {(tripletValue: string) => Promise<string[]>} getOutgoingProperties
+ * @property {(tripletValue: string) => Promise<string[]>} getClassesOfElement
+ */
 
 /**
  * A primitive in-memory store of triplets,
@@ -552,7 +676,7 @@ function intersectSuggestions(setA, setB, comparator = (a, b) => a === b) {
 
 class DSSAutocompletionClient {
 
-    /** @type {TripletStore} */
+    /** @type {TripletStoreLike} */
     tripletStore;
 
     /** @type {DSSClient} */
@@ -563,7 +687,7 @@ class DSSAutocompletionClient {
 
     /**
      * 
-     * @param {TripletStore} tripletStore 
+     * @param {TripletStoreLike} tripletStore 
      * @param {DSSClient} dssClient 
      */
     constructor(tripletStore, dssClient) {
@@ -630,6 +754,33 @@ class DSSAutocompletionClient {
             .map(p => ({ value: p.name, count: p.count, displayName: p.displayName, localName: p.localName, prefix: p.prefix, nsId: p.nsId }));
 
         return incomingProperties;
+    }
+
+    /**
+     * 
+     * @param {string | null} subjectValue 
+     * @param {string | null} objectValue 
+     * @param {AbortSignal | null} abortSignal 
+     * @param {QueryBuilder | null} queryBuilder 
+     */
+    async suggestProperties(subjectValue, objectValue, abortSignal = null, queryBuilder = null) {
+        if (subjectValue === "") {
+            subjectValue = null;
+        }
+        if (objectValue === "") {
+            objectValue = null;
+        }
+        if (queryBuilder === null) {
+            queryBuilder = new QueryBuilder();
+        }
+        const incomingProps = subjectValue ? await this.suggestIncomingProperties(subjectValue, abortSignal, queryBuilder) : null;
+        const outgoingProps = objectValue ? await this.suggestOutgoingProperties(objectValue, abortSignal) : null;
+        /** @type {PropertyData[] | null} */
+        let propertyIntersection = null;
+        if (incomingProps && outgoingProps) {
+            propertyIntersection = intersectSuggestions(incomingProps, outgoingProps, (a, b) => a.value === b.value).map(p => ({ value: p.value, count: p.count, displayName: p.displayName, localName: p.localName, prefix: p.prefix, nsId: p.nsId }));
+        }
+        return propertyIntersection ?? outgoingProps ?? incomingProps ?? [];
     }
 
     /**
@@ -928,20 +1079,7 @@ class QueryBuilder {
     }
 }
 
-/**
- * 
- * @param {string} baseUrl 
- * @param {AbortSignal | null} abortSignal 
- * @returns {Promise<{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]>}
- */
-async function getEndpoints(baseUrl, abortSignal = null) {
-    const resp = await fetch(`${baseUrl}/info`, {
-        signal: abortSignal
-    });
-    const byteData = await resp.text();
-    const data = JSON.parse(byteData.toString());
-    return data;
-}
+
 
 /* eslint-disable @typescript-eslint/naming-convention */
 module.exports = {
@@ -949,7 +1087,7 @@ module.exports = {
     QueryBuilder,
     TripletStore,
     DSSAutocompletionClient,
-    getEndpoints,
+    DefaultDSSRequestProvider,
     intersectSuggestions
 };
 /* eslint-enable @typescript-eslint/naming-convention */
