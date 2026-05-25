@@ -776,8 +776,8 @@ class DSSAutocompletionClient {
         if (queryBuilder === null) {
             queryBuilder = new QueryBuilder();
         }
-        const incomingProps = subjectValue ? await this.suggestIncomingProperties(subjectValue, abortSignal, queryBuilder) : null;
-        const outgoingProps = objectValue ? await this.suggestOutgoingProperties(objectValue, abortSignal) : null;
+        const incomingProps = objectValue ? await this.suggestIncomingProperties(objectValue, abortSignal, queryBuilder) : null;
+        const outgoingProps = subjectValue ? await this.suggestOutgoingProperties(subjectValue, abortSignal) : null;
         const nonZeroIncoming = incomingProps?.length ?? 0 > 0 ? incomingProps : null;
         const nonZeroOutgoing = outgoingProps?.length ?? 0 > 0 ? outgoingProps : null;
         /** @type {PropertyData[] | null} */
