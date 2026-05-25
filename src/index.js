@@ -524,10 +524,6 @@ class DSSClient {
 
             return results ?? [];
         }
-
-
-
-
     }
 
     /**
@@ -768,6 +764,7 @@ class DSSAutocompletionClient {
      * @param {string | null} objectValue 
      * @param {AbortSignal | null} abortSignal 
      * @param {QueryBuilder | null} queryBuilder 
+     * @returns {Promise<PropertyData[]>}
      */
     async suggestProperties(subjectValue, objectValue, abortSignal = null, queryBuilder = null) {
         if (subjectValue === "") {
@@ -781,12 +778,33 @@ class DSSAutocompletionClient {
         }
         const incomingProps = subjectValue ? await this.suggestIncomingProperties(subjectValue, abortSignal, queryBuilder) : null;
         const outgoingProps = objectValue ? await this.suggestOutgoingProperties(objectValue, abortSignal) : null;
+        const nonZeroIncoming = incomingProps?.length ?? 0 > 0 ? incomingProps : null;
+        const nonZeroOutgoing = outgoingProps?.length ?? 0 > 0 ? outgoingProps : null;
         /** @type {PropertyData[] | null} */
         let propertyIntersection = null;
-        if (incomingProps && outgoingProps) {
-            propertyIntersection = intersectSuggestions(incomingProps, outgoingProps, (a, b) => a.value === b.value).map(p => ({ value: p.value, count: p.count, displayName: p.displayName, localName: p.localName, prefix: p.prefix, nsId: p.nsId }));
+        if (nonZeroIncoming && nonZeroOutgoing) {
+            propertyIntersection = intersectSuggestions(nonZeroIncoming, nonZeroOutgoing, (a, b) => a.value === b.value).map(p => ({ value: p.value, count: p.count, displayName: p.displayName, localName: p.localName, prefix: p.prefix, nsId: p.nsId }));
+            if (propertyIntersection?.length === 0) {
+                // If there is no intersection, return the smaller of the two 
+                // sets to increase the chance of having relevant suggestions, 
+                // while still providing some results.
+                propertyIntersection = nonZeroIncoming.length < nonZeroOutgoing.length ? nonZeroIncoming : nonZeroOutgoing;
+            }
         }
-        return propertyIntersection ?? outgoingProps ?? incomingProps ?? [];
+        // Return the intersection, alternatively one of the non-empty sets, or request all properties if both sets are empty.
+        return propertyIntersection ?? nonZeroOutgoing ?? nonZeroIncoming ?? (await this.dssClient.requestProvider.getProperties({
+            main: {
+                limit: this.perRequestLimit,
+            },
+            element: {}
+        }, null)).data.map(p => ({
+            value: p.name,
+            count: p.count,
+            displayName: p.displayName,
+            localName: p.localName,
+            prefix: p.prefix,
+            nsId: p.nsId
+        }));
     }
 
     /**
@@ -883,7 +901,17 @@ class DSSAutocompletionClient {
             const params = propertyBuilder.buildDSSParams();
             validSuggestions = await this.dssClient.getClasses(params, abortSignal);
         }
-        return [...(validSuggestions ?? [])];
+        validSuggestions = [...(validSuggestions ?? [])];
+        if (validSuggestions.length === 0) {
+            // If no suggestions fetch without any constraints
+            validSuggestions = (await this.dssClient.requestProvider.getClasses({
+                main: {
+                    limit: this.perRequestLimit,
+                },
+                element: {}
+            }, null)).data;
+        }
+        return validSuggestions;
 
     }
 }
