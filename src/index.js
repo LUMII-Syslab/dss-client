@@ -490,7 +490,7 @@ export class DSSClient {
                 } else {
                     /** @type {boolean} */
                     const nextIsComplete = isOutputComplete(results, queryResult, isComplete, response.complete);
-                    results = intersectSuggestions(results, queryResult, (a, b) => a.name === b.name && a.type === b.type, isComplete, !response.complete);
+                    results = intersectSuggestions(results, queryResult, (a, b) => a.name === b.name && a.type === b.type, isComplete, response.complete);
                     isComplete = nextIsComplete;
                 }
             }
@@ -542,7 +542,7 @@ export class DSSClient {
             } else {
                 /** @type {boolean} */
                 const nextIsComplete = isOutputComplete(allResults, classData, isComplete, response.complete, (a, b) => a.value === b.value);
-                allResults = intersectSuggestions(allResults, classData, (a, b) => a.value === b.value, isComplete, !response.complete);
+                allResults = intersectSuggestions(allResults, classData, (a, b) => a.value === b.value, isComplete, response.complete);
                 isComplete = nextIsComplete;
             }
         }
@@ -641,10 +641,10 @@ export class TripletStore {
  * @param {(a: T, b: T) => boolean} [comparator]
  * @returns {Array<T & {count: number}>}
  */
-export function intersectSuggestions(setA, setB, comparator = (a, b) => a === b, setAIsIncomplete = false, setBIsIncomplete = false) {
+export function intersectSuggestions(setA, setB, comparator = (a, b) => a === b, setAIsComplete = true, setBIsComplete = true) {
     const a = new Array(...setA.values()).sort((a, b) => b.count - a.count);
     const b = new Array(...setB.values()).sort((a, b) => b.count - a.count);
-    if (setAIsIncomplete) {
+    if (!setAIsComplete) {
         const minA = a.reduce((min, item) => item.count < min ? item.count : min, Infinity);
         for (const item of setB) {
             // If set A is incomplete
@@ -656,7 +656,7 @@ export function intersectSuggestions(setA, setB, comparator = (a, b) => a === b,
             }
         }
     }
-    if (setBIsIncomplete) {
+    if (!setBIsComplete) {
         const minB = b.reduce((min, item) => item.count < min ? item.count : min, Infinity);
         for (const item of setA) {
             // If set B is incomplete
