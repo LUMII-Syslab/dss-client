@@ -10,8 +10,13 @@ This package provides 4 classes: DSSClient, TripletStore, QueryBuilder, DSSAutoc
 - QueryBuilder: A typed parameter builder for improving request experience.
 - DSSAutocompletionClient: Gathers context from a tripletstore and uses a DSSClient instance to create autocompletion suggestions for variables.
 
+For `DSSClient` to function, a request provider is necessary. This package provides a default implementation that performs fetch requests but requires
+outside elements to drive the provider's ontology.
+
 Example:
 ```ts
+const dssClient = new DSSClient(new DefaultDSSRequestProvider(myDssUrl));
+dssClient.ontology = myOntologyId;
 const tripleStore = new TripletStore();
 tripleStore.triplets = [
     {subject: "?x", predicate: "rdf:type", object: "dbo:Person"}
