@@ -481,11 +481,12 @@ export class DSSClient {
             let results = null;
             for (const query of allQueries) {
                 const queryParams = query.buildDSSParams();
-                const queryResult = await this.requestProvider.getProperties(queryParams, abortSignal).then(response => response.data);
+                const response = await this.requestProvider.getProperties(queryParams, abortSignal);
+                const queryResult = response.data;
                 if (results === null) {
                     results = queryResult;
                 } else {
-                    results = intersectSuggestions(results, queryResult, (a, b) => a.name === b.name && a.type === b.type);
+                    results = intersectSuggestions(results, queryResult, (a, b) => a.name === b.name && a.type === b.type, true, !response.complete);
                 }
             }
 
@@ -527,11 +528,12 @@ export class DSSClient {
         let allResults = null;
         for (const query of queries) {
             const queryParams = query.buildDSSParams();
-            const classData = await this.requestProvider.getClasses(queryParams, abortSignal).then(response => response.data);
+            const response = await this.requestProvider.getClasses(queryParams, abortSignal);
+            const classData = response.data;
             if (allResults === null) {
                 allResults = classData;
             } else {
-                allResults = intersectSuggestions(allResults, classData, (a, b) => a.value === b.value);
+                allResults = intersectSuggestions(allResults, classData, (a, b) => a.value === b.value, true, !response.complete);
             }
         }
 
@@ -629,9 +631,33 @@ export class TripletStore {
  * @param {(a: T, b: T) => boolean} [comparator]
  * @returns {Array<T & {count: number}>}
  */
-export function intersectSuggestions(setA, setB, comparator = (a, b) => a === b) {
-    const a = new Array(...setA.values());
-    const b = new Array(...setB.values());
+export function intersectSuggestions(setA, setB, comparator = (a, b) => a === b, setAIsIncomplete = false, setBIsIncomplete = false) {
+    const a = new Array(...setA.values()).sort((a, b) => b.count - a.count);
+    const b = new Array(...setB.values()).sort((a, b) => b.count - a.count);
+    if (setAIsIncomplete) {
+        const minA = a.reduce((min, item) => item.count < min ? item.count : min, Infinity);
+        for (const item of setB) {
+            // If set A is incomplete
+            // that item should be present in the intersection
+            // but we don't know its exact count
+            const existingA = [...setA].find(aItem => comparator(aItem, item));
+            if (!existingA) {
+                a.push({ ...item, count: minA });
+            }
+        }
+    }
+    if (setBIsIncomplete) {
+        const minB = b.reduce((min, item) => item.count < min ? item.count : min, Infinity);
+        for (const item of setA) {
+            // If set B is incomplete
+            // that item should be present in the intersection
+            // but we don't know its exact count
+            const existingB = [...setB].find(bItem => comparator(item, bItem));
+            if (!existingB) {
+                b.push({ ...item, count: minB });
+            }
+        }
+    }
     const out = [];
     for (const aElement of a) {
         const bElement = b.find(be => comparator(aElement, be));
@@ -640,7 +666,8 @@ export function intersectSuggestions(setA, setB, comparator = (a, b) => a === b)
             out.push(aElement);
         }
     }
-    return [...out];
+
+    return [...out].sort((a, b) => b.count - a.count);
 }
 
 export class DSSAutocompletionClient {
@@ -682,7 +709,7 @@ export class DSSAutocompletionClient {
 
 
         queryBuilder.incomingProperties = knownIncoming;
-        queryBuilder.outgoingProperties = knownOutgoing;
+        queryBuilder.outgoingProperties = [...knownOutgoing, ...knownClasses.map(c => ({ name: "rdf:type", className: c }))];
         if (queryBuilder.usePPRels == null) {
             queryBuilder.usePPRels = false;
         }
@@ -696,23 +723,9 @@ export class DSSAutocompletionClient {
          */
         let validSuggestions = null;
 
-        for (const cls of knownClasses) {
-            const builder = queryBuilder.clone();
-            builder.className = cls;
-            const params = builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal);
-            if (validSuggestions === null) {
-                validSuggestions = props;
-            } else {
-                validSuggestions = intersectSuggestions(validSuggestions, props, (a, b) => a.name === b.name && a.type === b.type);
-            }
-        }
-
-        if (knownClasses.length === 0) {
-            const params = queryBuilder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal);
-            validSuggestions = props;
-        }
+        const params = queryBuilder.buildDSSParams();
+        const props = await this.dssClient.getProperties(params, abortSignal);
+        validSuggestions = props;
 
         if (validSuggestions === null) {
             validSuggestions = [];
@@ -792,7 +805,7 @@ export class DSSAutocompletionClient {
 
         const propertyBuilder = new QueryBuilder();
         propertyBuilder.incomingProperties = knownIncoming;
-        propertyBuilder.outgoingProperties = knownOutgoing;
+        propertyBuilder.outgoingProperties = [...knownOutgoing, ...knownClasses.map(c => ({ name: "rdf:type", className: c }))];
         propertyBuilder.usePPRels = true;
         propertyBuilder.propertyKind = 'All';
         propertyBuilder.limit = this.perRequestLimit;
