@@ -479,14 +479,19 @@ export class DSSClient {
             const allQueries = [...decompressed.classQueriesForPropertyRequests, ...decompressed.incomingPropertyQueries, ...decompressed.outgoingPropertyQueries];
             /** @type {DSSPropertyData[] | null} */
             let results = null;
+            let isComplete = false;
             for (const query of allQueries) {
                 const queryParams = query.buildDSSParams();
                 const response = await this.requestProvider.getProperties(queryParams, abortSignal);
                 const queryResult = response.data;
                 if (results === null) {
                     results = queryResult;
+                    isComplete = response.complete;
                 } else {
-                    results = intersectSuggestions(results, queryResult, (a, b) => a.name === b.name && a.type === b.type, true, !response.complete);
+                    /** @type {boolean} */
+                    const nextIsComplete = isOutputComplete(results, queryResult, isComplete, response.complete);
+                    results = intersectSuggestions(results, queryResult, (a, b) => a.name === b.name && a.type === b.type, isComplete, !response.complete);
+                    isComplete = nextIsComplete;
                 }
             }
 
@@ -526,14 +531,19 @@ export class DSSClient {
         const queries = [...decompressed.classQueriesForClassRequests, ...decompressed.incomingPropertyQueries, ...decompressed.outgoingPropertyQueries];
         /** @type {ClassData[] | null} */
         let allResults = null;
+        let isComplete = false;
         for (const query of queries) {
             const queryParams = query.buildDSSParams();
             const response = await this.requestProvider.getClasses(queryParams, abortSignal);
             const classData = response.data;
             if (allResults === null) {
                 allResults = classData;
+                isComplete = response.complete;
             } else {
-                allResults = intersectSuggestions(allResults, classData, (a, b) => a.value === b.value, true, !response.complete);
+                /** @type {boolean} */
+                const nextIsComplete = isOutputComplete(allResults, classData, isComplete, response.complete, (a, b) => a.value === b.value);
+                allResults = intersectSuggestions(allResults, classData, (a, b) => a.value === b.value, isComplete, !response.complete);
+                isComplete = nextIsComplete;
             }
         }
 
@@ -668,6 +678,34 @@ export function intersectSuggestions(setA, setB, comparator = (a, b) => a === b,
     }
 
     return [...out].sort((a, b) => b.count - a.count);
+}
+
+/**
+ * @template T
+ * @param {T[]} a 
+ * @param {T[]} b 
+ * @param {boolean} aComplete 
+ * @param {boolean} bComplete 
+ * @param {(a: T, b: T) => boolean} comparator
+ * @returns {boolean}
+ */
+function isOutputComplete(a, b, aComplete, bComplete, comparator = (a, b) => a === b) {
+    if (aComplete && bComplete) {
+        return true;
+    }
+    if (!aComplete && !bComplete) {
+        return false;
+    }
+    // If either one is incomplete, check if the complete set
+    // is a subset of the incomplete set.
+    const completeSet = aComplete ? a : b;
+    const incompleteSet = aComplete ? b : a;
+    for (const item of completeSet) {
+        if (!incompleteSet.some(i => comparator(i, item))) {
+            return false;
+        }
+    }
+    return true;
 }
 
 export class DSSAutocompletionClient {
@@ -814,21 +852,7 @@ export class DSSAutocompletionClient {
          * @type {Array<DSSPropertyData> | null}
          */
         let validSuggestions = null;
-
-        for (const cls of knownClasses) {
-            const builder = propertyBuilder.clone();
-            builder.className = cls;
-            builder.usePPRels = true;
-            const params = builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal);
-            if (validSuggestions === null) {
-                validSuggestions = props;
-            } else {
-                validSuggestions = intersectSuggestions(validSuggestions, props, (a, b) => a.name === b.name && a.type === b.type);
-            }
-        }
-
-        if (knownClasses.length === 0) {
+        {
             const params = propertyBuilder.buildDSSParams();
             const props = await this.dssClient.getProperties(params, abortSignal);
             validSuggestions = props;
