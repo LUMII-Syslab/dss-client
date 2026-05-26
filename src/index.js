@@ -3,7 +3,9 @@
 
 export * as queryBuilderModule from "./queryLexer";
 export * as suggestionComparatorModule from "./suggestionComparator";
-
+// add top level re-exports for ease of use
+export * from "./queryLexer";
+export * from "./suggestionComparator";
 
 /**
  * @typedef {Object} DSSParams
