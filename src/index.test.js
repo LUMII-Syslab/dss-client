@@ -1,7 +1,6 @@
 
 const { expect, it, describe, beforeAll, jest, afterAll } = require('@jest/globals');
-
-const { TripletStore, DSSClient, QueryBuilder } = require('./index.js');
+const { TripletStore, DSSClient, QueryBuilder } = require('@src/index.js');
 const { afterEach, beforeEach } = require('node:test');
 const { count } = require('node:console');
 /** @import { TripletStore, DSSClient } from './index.js'  */
@@ -74,7 +73,7 @@ describe('ManualTripletStore', () => {
 
 describe('intersectSuggestions', () => {
     it('Returns suggestions that are in both lists', async () => {
-        const { intersectSuggestions } = require('./index.js');
+        const { intersectSuggestions } = require('@src/index.js');
         const list1 = [
             { value: 'prop1', count: 10 },
             { value: 'prop2', count: 5 },
@@ -95,7 +94,7 @@ describe('intersectSuggestions', () => {
     });
 
     it('Takes min count of suggestions that are in both lists', () => {
-        const { intersectSuggestions } = require('./index.js');
+        const { intersectSuggestions } = require('@src/index.js');
         const list1 = [
             { value: 'prop1', count: 10 },
             { value: 'prop2', count: 5 },
@@ -117,7 +116,7 @@ describe('intersectSuggestions', () => {
         expect(prop3.count).toBe(3);
     });
     it('Handles empty lists', () => {
-        const { intersectSuggestions } = require('./index.js');
+        const { intersectSuggestions } = require('@src/index.js');
         const list1 = [];
         const list2 = [
             { value: 'prop2', count: 7 },

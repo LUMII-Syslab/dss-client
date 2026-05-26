@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 //@ts-check
 
-const queryBuilderModule = require('./queryLexer');
-const suggestionComparatorModule = require('./suggestionComparator');
+export * as queryBuilderModule from "./queryLexer";
+export * as suggestionComparatorModule from "./suggestionComparator";
 
 
 /**
@@ -259,7 +259,7 @@ function isClassResponse(response) {
  * @implements {DSSRequestProvider} 
  * @borrows  DSSRequestProvider#getClasses as getClasses 
  * */
-class DefaultDSSRequestProvider {
+export class DefaultDSSRequestProvider {
 
     /** 
      * @type {Promise<{id: number, display_name: string, db_schema_name: string, schema_name: string, sparql_url: string}[]>}
@@ -423,7 +423,7 @@ class DefaultDSSRequestProvider {
  * An opinionated client for fetching properties and classes
  * from a DSS endpoint.
  */
-class DSSClient {
+export class DSSClient {
 
     /**@type {boolean} */
     traceLog = false;
@@ -608,7 +608,7 @@ class DSSClient {
  * Mostly useable as a thin wrapper around an array of triplets.
  * @implements {TripletStoreLike}
  */
-class TripletStore {
+export class TripletStore {
 
     /** @type {Array<{subject: string, predicate: string, object: string}>} */
     triplets = [];
@@ -662,7 +662,7 @@ class TripletStore {
  * @param {(a: T, b: T) => boolean} [comparator]
  * @returns {Array<T & {count: number}>}
  */
-function intersectSuggestions(setA, setB, comparator = (a, b) => a === b) {
+export function intersectSuggestions(setA, setB, comparator = (a, b) => a === b) {
     const a = new Array(...setA.values());
     const b = new Array(...setB.values());
     const out = [];
@@ -676,7 +676,7 @@ function intersectSuggestions(setA, setB, comparator = (a, b) => a === b) {
     return [...out];
 }
 
-class DSSAutocompletionClient {
+export class DSSAutocompletionClient {
 
     /** @type {TripletStoreLike} */
     tripletStore;
@@ -916,7 +916,7 @@ class DSSAutocompletionClient {
     }
 }
 
-class QueryBuilder {
+export class QueryBuilder {
 
     /** @type {({ name: string, className: string } | string)[] | null} */
     incomingProperties = null;
@@ -1112,18 +1112,3 @@ class QueryBuilder {
 
     }
 }
-
-
-
-/* eslint-disable @typescript-eslint/naming-convention */
-module.exports = {
-    DSSClient,
-    QueryBuilder,
-    TripletStore,
-    DSSAutocompletionClient,
-    DefaultDSSRequestProvider,
-    intersectSuggestions,
-    queryBuilderModule,
-    suggestionComparatorModule
-};
-/* eslint-enable @typescript-eslint/naming-convention */
