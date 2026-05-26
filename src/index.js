@@ -444,12 +444,11 @@ export class DSSClient {
      * Fetches properties from DSS using provided parameters
      * @param {DSSParams} params
      * @param {AbortSignal | null} abortSignal
-     * @param {boolean} uncompressed When true, splits provided parameters 
      * into multiple requests
      * that will provide more accurate results, while usually taking longer.
      * @returns {Promise<DSSPropertyData[]>}
      */
-    async getProperties(params, abortSignal = null, uncompressed = true) {
+    async getProperties(params, abortSignal = null) {
         const endpointInfo = await this.requestProvider.getOntologyList();
         if (params.main === undefined) {
             params.main = {};
@@ -472,41 +471,7 @@ export class DSSClient {
         }
         params.main.schemaName = endpoint.name;
         params.main.endpointUrl = endpoint.sparqlUrl;
-
-        if (!uncompressed) {
-            return this.requestProvider.getProperties(params, abortSignal).then(response => response.data);
-            // const resp = await fetch(`${this.baseUrl}/ontologies/${ontology}/getProperties`, {
-            //     method: 'POST',
-            //     headers: {
-            //         // eslint-disable-next-line @typescript-eslint/naming-convention
-            //         'Content-Type': 'application/json',
-            //     },
-            //     body: JSON.stringify(params),
-            //     signal: abortSignal,
-            // });
-            // const byteData = await resp.text();
-            // const data = JSON.parse(byteData.toString());
-            // if (!data.complete) {
-            //     if (this.traceLog) {
-            //         console.warn(`Warning: fetched properties for ontology ${ontology} not complete (limit ${limit} reached) Ignoring results.`);
-            //     }
-            // }
-            // if (!isPropertyResponse(data)) {
-            //     throw new Error(`Received bad response from DSS endpoint. Response: ${JSON.stringify(data)}`);
-            // }
-
-            // return data.data.map(
-            //     (p) => ({
-            //         name: p.iri,
-            //         type: p.mark,
-            //         count: Number(p.o),
-            //         displayName: p.display_name,
-            //         localName: p.local_name,
-            //         prefix: p.prefix,
-            //         nsId: p.ns_id
-            //     })
-            // );
-        } else {
+        {
             const builder = QueryBuilder.prototype.fromDssParams(params);
             const decompressed = builder.decompressParams();
             const allQueries = [...decompressed.classQueriesForPropertyRequests, ...decompressed.incomingPropertyQueries, ...decompressed.outgoingPropertyQueries];
@@ -703,7 +668,7 @@ export class DSSAutocompletionClient {
      * @param {AbortSignal | null} abortSignal
      * @return {Promise<PropertyData[]>}
      */
-    async suggestIncomingProperties(tripletValue, abortSignal = null, queryBuilder = new QueryBuilder(), uncompressed = false) {
+    async suggestIncomingProperties(tripletValue, abortSignal = null, queryBuilder = new QueryBuilder()) {
         const knownValueClasses = await this.tripletStore.getClassesOfElement(tripletValue);
         const knownValueIncoming = await this.tripletStore.getIncomingProperties(tripletValue);
         const knownValueOutgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
@@ -733,7 +698,7 @@ export class DSSAutocompletionClient {
             const builder = queryBuilder.clone();
             builder.className = cls;
             const params = builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal, uncompressed);
+            const props = await this.dssClient.getProperties(params, abortSignal);
             if (validSuggestions === null) {
                 validSuggestions = props;
             } else {
@@ -743,7 +708,7 @@ export class DSSAutocompletionClient {
 
         if (knownClasses.length === 0) {
             const params = queryBuilder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal, uncompressed);
+            const props = await this.dssClient.getProperties(params, abortSignal);
             validSuggestions = props;
         }
 
@@ -813,7 +778,7 @@ export class DSSAutocompletionClient {
      * @param {AbortSignal | null} abortSignal
      * @return {Promise<PropertyData[]>}
      */
-    async suggestOutgoingProperties(tripletValue, abortSignal = null, uncompressed = false) {
+    async suggestOutgoingProperties(tripletValue, abortSignal = null) {
         const knownValueClasses = await this.tripletStore.getClassesOfElement(tripletValue);
         const knownValueIncoming = await this.tripletStore.getIncomingProperties(tripletValue);
         const knownValueOutgoing = await this.tripletStore.getOutgoingProperties(tripletValue);
@@ -840,7 +805,7 @@ export class DSSAutocompletionClient {
             builder.className = cls;
             builder.usePPRels = true;
             const params = builder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal, uncompressed);
+            const props = await this.dssClient.getProperties(params, abortSignal);
             if (validSuggestions === null) {
                 validSuggestions = props;
             } else {
@@ -850,7 +815,7 @@ export class DSSAutocompletionClient {
 
         if (knownClasses.length === 0) {
             const params = propertyBuilder.buildDSSParams();
-            const props = await this.dssClient.getProperties(params, abortSignal, uncompressed);
+            const props = await this.dssClient.getProperties(params, abortSignal);
             validSuggestions = props;
         }
 
